@@ -1,0 +1,239 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProductStatus {
+  new
+  hot
+  sale
+}
+
+enum OrderStatus {
+  pending
+  processing
+  paid
+  shipped
+  out_for_delivery
+  delivered
+  cancelled
+}
+
+enum PaymentStatus {
+  pending
+  partial
+  paid
+  failed
+  refunded
+}
+
+enum PaymentMethod {
+  cod
+  cmi_card
+  installments
+}
+
+enum PromoDiscountType {
+  percentage
+  fixed
+}
+
+enum LoyaltyTier {
+  bronze
+  silver
+  gold
+}
+
+model User {
+  id                   String      @id @default(cuid())
+  clerkUserId          String      @unique
+  email                String
+  fullName             String
+  loyaltyCardNumber    String      @unique
+  loyaltyPoints        Int         @default(0)
+  loyaltyTier          LoyaltyTier @default(bronze)
+  installmentsEligible Boolean     @default(false)
+  stripeCustomerId     String?
+  addresses            Address[]
+  orders               Order[]
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  @@index([email])
+  @@index([fullName])
+}
+
+model Address {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  address   String
+  city      String
+  phone     String
+  state     String
+  zip       String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([userId, isDefault])
+}
+
+model Category {
+  id          String            @id @default(cuid())
+  title       String
+  slug        String            @unique
+  description String?
+  range       Int?
+  featured    Boolean           @default(false)
+  imageUrl    String?
+  products    ProductCategory[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([title])
+}
+
+model Brand {
+  id          String    @id @default(cuid())
+  title       String
+  slug        String    @unique
+  description String?
+  imageUrl    String?
+  products    Product[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([title])
+}
+
+model Product {
+  id          String            @id @default(cuid())
+  name        String
+  slug        String            @unique
+  description String?
+  price       Decimal           @db.Decimal(10, 2)
+  discount    Int               @default(0)
+  stock       Int               @default(0)
+  status      ProductStatus     @default(new)
+  isFeatured  Boolean           @default(false)
+  brandId     String?
+  brand       Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  images      ProductImage[]
+  categories  ProductCategory[]
+  orderItems  OrderItem[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([name])
+  @@index([brandId])
+  @@index([status])
+  @@index([price])
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  altText   String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId, sortOrder])
+}
+
+model ProductCategory {
+  productId  String
+  categoryId String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  assignedAt DateTime @default(now())
+
+  @@id([productId, categoryId])
+  @@index([categoryId])
+}
+
+model PromoCode {
+  id                    String            @id @default(cuid())
+  title                 String
+  code                  String            @unique
+  active                Boolean           @default(true)
+  discountType          PromoDiscountType @default(percentage)
+  discountValue         Decimal           @db.Decimal(10, 2)
+  minimumOrderAmount    Decimal           @db.Decimal(10, 2) @default(0)
+  allowedPaymentMethods PaymentMethod[]
+  startsAt              DateTime?
+  endsAt                DateTime?
+  usageLimit            Int?
+  usedCount             Int               @default(0)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@index([active])
+  @@index([startsAt, endsAt])
+}
+
+model Order {
+  id                       String        @id @default(cuid())
+  orderNumber              String        @unique
+  userId                   String?
+  user                     User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  clerkUserId              String?
+  customerName             String
+  email                    String
+  currency                 String        @default("MAD")
+  status                   OrderStatus   @default(pending)
+  paymentStatus            PaymentStatus @default(pending)
+  paymentMethod            PaymentMethod @default(cmi_card)
+  totalPrice               Decimal       @db.Decimal(10, 2)
+  amountDiscount           Decimal       @db.Decimal(10, 2) @default(0)
+  promoCode                String?
+  promoDiscount            Decimal       @db.Decimal(10, 2) @default(0)
+  orderDate                DateTime      @default(now())
+  installmentMonths        Int?
+  installmentMonthlyAmount Decimal?      @db.Decimal(10, 2)
+  shippingName             String?
+  shippingPhone            String?
+  shippingAddress          String?
+  shippingCity             String?
+  shippingState            String?
+  shippingZip              String?
+  invoiceId                String?
+  invoiceNumber            String?
+  invoiceHostedUrl         String?
+  stripeCheckoutSessionId  String?       @unique
+  stripeCustomerId         String?
+  stripePaymentIntentId    String?
+  items                    OrderItem[]
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+
+  @@index([clerkUserId, orderDate])
+  @@index([status, paymentStatus])
+  @@index([email])
+}
+
+model OrderItem {
+  id                      String   @id @default(cuid())
+  orderId                 String
+  order                   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId               String?
+  product                 Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productNameSnapshot     String
+  productPriceSnapshot    Decimal  @db.Decimal(10, 2)
+  productImageUrlSnapshot String?
+  quantity                Int
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([productId])
+}
