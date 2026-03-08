@@ -9,6 +9,8 @@ export interface CartItem {
 
 interface StoreState {
   items: CartItem[];
+  hasHydrated: boolean;
+  setHasHydrated: (value: boolean) => void;
   addItem: (product: Product) => void;
   removeItem: (productId: string) => void;
   deleteCartProduct: (productId: string) => void;
@@ -28,7 +30,9 @@ const useStore = create<StoreState>()(
   persist(
     (set, get) => ({
       items: [],
+      hasHydrated: false,
       favoriteProduct: [],
+      setHasHydrated: (value) => set({ hasHydrated: value }),
       addItem: (product) =>
         set((state) => {
           const existingItem = state.items.find(
@@ -115,6 +119,12 @@ const useStore = create<StoreState>()(
     }),
     {
       name: "cart-store",
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          console.error("Store rehydration failed:", error);
+        }
+        state?.setHasHydrated(true);
+      },
     }
   )
 );

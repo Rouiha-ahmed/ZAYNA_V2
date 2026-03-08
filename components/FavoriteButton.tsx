@@ -18,8 +18,11 @@ const FavoriteButton = ({
   className?: string;
   iconClassName?: string;
 }) => {
-  const { favoriteProduct, addToFavorite } = useStore();
-  const existingProduct = favoriteProduct.find(
+  const favoriteProduct = useStore((state) => state.favoriteProduct);
+  const addToFavorite = useStore((state) => state.addToFavorite);
+  const hasHydrated = useStore((state) => state.hasHydrated);
+  const safeFavorites = hasHydrated ? favoriteProduct : [];
+  const existingProduct = safeFavorites.find(
     (item) => item._id === product?._id
   );
 
@@ -47,12 +50,13 @@ const FavoriteButton = ({
         >
           <Heart className={cn("h-4.5 w-4.5", iconClassName)} />
           <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-shop_dark_green px-1 text-[10px] font-semibold text-white">
-            {favoriteProduct.length ? favoriteProduct.length : 0}
+            {safeFavorites.length ? safeFavorites.length : 0}
           </span>
         </Link>
       ) : (
         <button
           onClick={handleFavorite}
+          disabled={!hasHydrated}
           className="group relative hover:text-shop_light_green hoverEffect border border-shop_light_green/80 hover:border-shop_light_green p-1.5 rounded-sm"
         >
           {existingProduct ? (

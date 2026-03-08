@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { BarChart3, Layers3, Package2, Percent, ShieldCheck, Store } from "lucide-react";
+import { BarChart3, Layers3, Package2, Percent, ShieldCheck, ShoppingBag, Store } from "lucide-react";
 import { redirect } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
@@ -8,8 +8,10 @@ import { getAdminIdentity } from "@/lib/admin";
 
 const adminSections = [
   { href: "/admin#dashboard", label: "Dashboard", icon: BarChart3 },
-  { href: "/admin#categories", label: "Categories", icon: Layers3 },
+  { href: "/admin#orders", label: "Commandes", icon: ShoppingBag },
   { href: "/admin#products", label: "Produits", icon: Package2 },
+  { href: "/admin#categories", label: "Categories", icon: Layers3 },
+  { href: "/admin#brands", label: "Marques", icon: Store },
   { href: "/admin#promos", label: "Codes promo", icon: Percent },
 ];
 
@@ -25,12 +27,24 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(77,182,198,0.16),_transparent_28%),linear-gradient(180deg,_#f7fafc_0%,_#edf5f7_45%,_#f5f7f8_100%)] text-slate-900">
+    <div
+      className="min-h-screen text-slate-900"
+      style={{
+        backgroundImage:
+          "radial-gradient(circle at top left, rgba(77, 182, 198, 0.16), transparent 28%), linear-gradient(180deg, #f7fafc 0%, #edf5f7 45%, #f5f7f8 100%)",
+      }}
+    >
       <div className="mx-auto flex max-w-[1700px] gap-6 px-4 py-4 md:px-6 lg:px-8">
         <aside className="hidden w-80 shrink-0 lg:block">
           <div className="sticky top-4 space-y-4">
             <div className="overflow-hidden rounded-[28px] border border-shop_light_green/20 bg-[#102654] text-white shadow-[0_28px_80px_-42px_rgba(16,38,84,0.85)]">
-              <div className="bg-[linear-gradient(135deg,rgba(77,182,198,0.28),transparent_55%),linear-gradient(180deg,#17336f_0%,#102654_100%)] p-6">
+              <div
+                className="p-6"
+                style={{
+                  backgroundImage:
+                    "linear-gradient(135deg, rgba(77, 182, 198, 0.28), transparent 55%), linear-gradient(180deg, #17336f 0%, #102654 100%)",
+                }}
+              >
                 <div className="flex items-center gap-3">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15">
                     <ShieldCheck className="h-6 w-6 text-shop_light_green" />

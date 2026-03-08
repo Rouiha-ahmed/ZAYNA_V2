@@ -60,8 +60,10 @@ const CartPage = () => {
     getItemCount,
     resetCart,
   } = useStore();
+  const hasHydrated = useStore((state) => state.hasHydrated);
   const [loading, setLoading] = useState(false);
   const groupedItems = useStore((state) => state.getGroupedItems());
+  const safeGroupedItems = hasHydrated ? groupedItems : [];
   const { isSignedIn } = useAuth();
   const [addresses, setAddresses] = useState<Address[] | null>(null);
   const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
@@ -191,7 +193,7 @@ const CartPage = () => {
     fetchCheckoutContext();
   }, [fetchAddresses, fetchCheckoutContext]);
 
-  const subtotal = getTotalPrice();
+  const subtotal = hasHydrated ? getTotalPrice() : 0;
   const promoDiscount = promoState?.valid ? promoState.discountAmount : 0;
   const finalTotal = Math.max(0, subtotal - promoDiscount);
 
@@ -254,7 +256,7 @@ const CartPage = () => {
 
       if (paymentMethod === "cod" || paymentMethod === "installments") {
         const order = await createManualOrder({
-          items: groupedItems,
+          items: safeGroupedItems,
           address: selectedAddress,
           paymentMethod,
           promoCode: promoState?.valid ? promoCode.trim().toUpperCase() : undefined,
@@ -270,7 +272,7 @@ const CartPage = () => {
         return;
       }
 
-      const checkoutUrl = await createCheckoutSession(groupedItems, metadata);
+      const checkoutUrl = await createCheckoutSession(safeGroupedItems, metadata);
       if (checkoutUrl) {
         window.location.href = checkoutUrl;
       } else {
@@ -295,8 +297,24 @@ const CartPage = () => {
   return (
     <div className="bg-gray-50 pb-10">
       {isSignedIn ? (
-        <Container>
-          {groupedItems?.length ? (
+        !hasHydrated ? (
+          <Container>
+            <div className="py-10">
+              <div className="rounded-2xl border bg-white p-8 shadow-sm">
+                <div className="h-7 w-48 animate-pulse rounded bg-gray-100" />
+                <div className="mt-6 grid gap-4 lg:grid-cols-[2fr_1fr]">
+                  <div className="space-y-3">
+                    <div className="h-28 animate-pulse rounded-xl bg-gray-100" />
+                    <div className="h-28 animate-pulse rounded-xl bg-gray-100" />
+                  </div>
+                  <div className="h-64 animate-pulse rounded-xl bg-gray-100" />
+                </div>
+              </div>
+            </div>
+          </Container>
+        ) : (
+          <Container>
+            {safeGroupedItems.length ? (
             <>
               <div className="flex items-center gap-2 py-5">
                 <ShoppingBag className="text-darkColor" />
@@ -305,7 +323,7 @@ const CartPage = () => {
               <div className="grid lg:grid-cols-3 md:gap-8">
                 <div className="lg:col-span-2 rounded-lg">
                   <div className="border bg-white rounded-md">
-                    {groupedItems?.map(({ product }) => {
+                    {safeGroupedItems.map(({ product }) => {
                       const itemCount = getItemCount(product?._id);
                       return (
                         <div
@@ -843,10 +861,11 @@ const CartPage = () => {
                 </div>
               </div>
             </>
-          ) : (
-            <EmptyCart />
-          )}
-        </Container>
+            ) : (
+              <EmptyCart />
+            )}
+          </Container>
+        )
       ) : (
         <NoAccess />
       )}

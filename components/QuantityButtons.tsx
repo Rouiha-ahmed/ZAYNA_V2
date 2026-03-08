@@ -11,8 +11,11 @@ interface Props {
   className?: string;
 }
 const QuantityButtons = ({ product, className }: Props) => {
-  const { addItem, removeItem, getItemCount } = useStore();
-  const itemCount = getItemCount(product?._id);
+  const addItem = useStore((state) => state.addItem);
+  const removeItem = useStore((state) => state.removeItem);
+  const getItemCount = useStore((state) => state.getItemCount);
+  const hasHydrated = useStore((state) => state.hasHydrated);
+  const itemCount = hasHydrated ? getItemCount(product?._id) : 0;
   const isOutOfStock = product?.stock === 0;
 
   const handleRemoveProduct = () => {
@@ -39,7 +42,7 @@ const QuantityButtons = ({ product, className }: Props) => {
         onClick={handleRemoveProduct}
         variant="outline"
         size="icon"
-        disabled={itemCount === 0 || isOutOfStock}
+        disabled={!hasHydrated || itemCount === 0 || isOutOfStock}
         className="w-6 h-6 border hover:bg-shop_dark_green/20 hoverEffect"
       >
         <Minus />
@@ -51,7 +54,7 @@ const QuantityButtons = ({ product, className }: Props) => {
         onClick={handleAddToCart}
         variant="outline"
         size="icon"
-        disabled={isOutOfStock}
+        disabled={!hasHydrated || isOutOfStock}
         className="w-6 h-6 border hover:bg-shop_dark_green/20 hoverEffect"
       >
         <Plus />

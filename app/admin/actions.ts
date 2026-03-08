@@ -1,475 +1,1088 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-
-import { PaymentMethod, Prisma, ProductStatus, PromoDiscountType } from "@prisma/client";
-import { redirect } from "next/navigation";
+import { PaymentMethod, type ProductStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
-import { requireAdmin } from "@/lib/admin";
+import { adminOrderStageOptions, adminStageToOrderStatus, requireAdmin } from "@/lib/admin";
+import { deleteStoredAsset, deleteStoredAssets, isUploadedFile, saveOptimizedImage } from "@/lib/admin-media";
 import { prisma } from "@/lib/prisma";
 
-const IMAGE_ROOT = path.join(process.cwd(), "public", "static-assets");
-const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024;
-const ALLOWED_IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
-const MIME_TO_EXTENSION = new Map([
-  ["image/png", ".png"],
-  ["image/jpeg", ".jpg"],
-  ["image/webp", ".webp"],
-]);
+type AdminSection =
+  | "dashboard"
+  | "orders"
+  | "products"
+  | "categories"
+  | "brands"
+  | "promos";
 
-const normalizeSlug = (value: string) =>
-  value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
+type EntityName = "category" | "brand" | "product";
 
-const normalizePromoCode = (value: string) =>
-  value
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9\s-_]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
+type UploadedAsset = Awaited<ReturnType<typeof saveOptimizedImage>>;
 
-const parseNumber = (value: FormDataEntryValue | null, fallback = 0) => {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
+const allPaymentMethods: PaymentMethod[] = ["cod", "cmi_card", "installments"];
+
+const readText = (formData: FormData, key: string) => {
+  const value = formData.get(key);
+  return typeof value === "string" ? value.trim() : "";
 };
 
-const parseOptionalDate = (value: FormDataEntryValue | null) => {
-  if (typeof value !== "string" || !value.trim()) {
+const readOptionalText = (formData: FormData, key: string) => {
+  const value = readText(formData, key);
+  return value || null;
+};
+
+const readBoolean = (formData: FormData, key: string) => formData.get(key) === "on";
+
+const readInteger = (
+  formData: FormData,
+  key: string,
+  options: { min?: number; max?: number; defaultValue?: number } = {}
+) => {
+  const rawValue = readText(formData, key);
+
+  if (!rawValue) {
+    return options.defaultValue ?? 0;
+  }
+
+  const value = Number.parseInt(rawValue, 10);
+
+  if (Number.isNaN(value)) {
+    throw new Error("Merci de verifier les nombres saisis.");
+  }
+
+  if (typeof options.min === "number" && value < options.min) {
+    throw new Error("Certaines valeurs numeriques sont trop petites.");
+  }
+
+  if (typeof options.max === "number" && value > options.max) {
+    throw new Error("Certaines valeurs numeriques sont trop grandes.");
+  }
+
+  return value;
+};
+
+const readDecimal = (
+  formData: FormData,
+  key: string,
+  options: { min?: number; max?: number; defaultValue?: number } = {}
+) => {
+  const rawValue = readText(formData, key);
+
+  if (!rawValue) {
+    return options.defaultValue ?? 0;
+  }
+
+  const value = Number.parseFloat(rawValue);
+
+  if (Number.isNaN(value)) {
+    throw new Error("Merci de verifier les montants saisis.");
+  }
+
+  if (typeof options.min === "number" && value < options.min) {
+    throw new Error("Certains montants sont trop petits.");
+  }
+
+  if (typeof options.max === "number" && value > options.max) {
+    throw new Error("Certains montants sont trop grands.");
+  }
+
+  return value;
+};
+
+const readDate = (formData: FormData, key: string) => {
+  const value = readText(formData, key);
+
+  if (!value) {
     return null;
   }
 
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-};
+  const date = new Date(`${value}T23:59:59`);
 
-const isUploadedFile = (value: FormDataEntryValue | null): value is File =>
-  typeof File !== "undefined" && value instanceof File && value.size > 0;
-
-const getUploadExtension = (file: File) => {
-  const mimeExtension = MIME_TO_EXTENSION.get(file.type.toLowerCase());
-  if (mimeExtension) {
-    return mimeExtension;
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("La date selectionnee n'est pas valide.");
   }
 
-  const filenameExtension = path.extname(file.name || "").toLowerCase();
-  return ALLOWED_IMAGE_EXTENSIONS.has(filenameExtension) ? filenameExtension : null;
+  return date;
 };
 
-const saveImageFile = async (
-  file: File,
-  directory: "brands" | "products" | "categories",
-  baseName: string
+const readStringList = (formData: FormData, key: string) =>
+  Array.from(
+    new Set(
+      formData
+        .getAll(key)
+        .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+        .filter(Boolean)
+    )
+  );
+
+const readUploadedFiles = (formData: FormData, key: string) =>
+  formData.getAll(key).filter(isUploadedFile);
+
+const slugify = (value: string) =>
+  value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") || "item";
+
+const promoCodeify = (value: string) =>
+  value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") || "PROMO";
+
+const adminRedirect = (
+  section: AdminSection,
+  params: {
+    status?: string;
+    error?: string;
+  }
 ) => {
-  const extension = getUploadExtension(file);
+  const searchParams = new URLSearchParams();
 
-  if (!extension) {
-    throw new Error("Le fichier image doit etre en PNG, JPG ou WEBP.");
+  if (params.status) {
+    searchParams.set("status", params.status);
   }
 
-  if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
-    throw new Error("Chaque image doit faire moins de 5 Mo.");
+  if (params.error) {
+    searchParams.set("error", params.error);
   }
 
-  const safeBaseName = normalizeSlug(baseName) || directory;
-  const fileName = `${safeBaseName}-${Date.now()}-${randomUUID().slice(0, 8)}${extension}`;
-  const targetDirectory = path.join(IMAGE_ROOT, directory);
-  const targetPath = path.join(targetDirectory, fileName);
-  const fileBuffer = Buffer.from(await file.arrayBuffer());
-
-  await mkdir(targetDirectory, { recursive: true });
-  await writeFile(targetPath, fileBuffer);
-
-  return `/static-assets/${directory}/${fileName}`;
+  const query = searchParams.toString();
+  redirect(`/admin${query ? `?${query}` : ""}#${section}`);
 };
 
-const getErrorMessage = (error: unknown) => {
-  if (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === "P2002"
-  ) {
-    return "Une valeur unique existe deja. Verifiez le slug ou le code.";
-  }
+const isRedirectSignal = (error: unknown): error is { digest: string } =>
+  Boolean(
+    error &&
+      typeof error === "object" &&
+      "digest" in error &&
+      typeof (error as { digest?: unknown }).digest === "string" &&
+      (error as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+  );
 
-  if (error instanceof Error) {
-    return error.message;
-  }
+const getActionErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback;
 
-  return "Une erreur inattendue est survenue.";
-};
-
-const adminRedirect = (params: Record<string, string | undefined>, hash?: string) => {
-  const search = new URLSearchParams();
-
-  Object.entries(params).forEach(([key, value]) => {
-    if (value) {
-      search.set(key, value);
+const withAction = async (
+  section: AdminSection,
+  fallbackMessage: string,
+  task: () => Promise<void>
+) => {
+  try {
+    await requireAdmin();
+    await task();
+  } catch (error) {
+    if (isRedirectSignal(error)) {
+      throw error;
     }
+
+    adminRedirect(section, {
+      error: getActionErrorMessage(error, fallbackMessage),
+    });
+  }
+};
+
+const refreshStorefront = (paths: Array<string | null | undefined> = []) => {
+  const basePaths = ["/admin", "/", "/shop", "/deal", "/orders"];
+  const revalidationTargets = [...basePaths, ...paths.filter(Boolean)];
+
+  for (const path of new Set(revalidationTargets)) {
+    revalidatePath(path as string);
+  }
+};
+
+const requireId = (value: string, message: string) => {
+  if (!value) {
+    throw new Error(message);
+  }
+
+  return value;
+};
+
+const slugExists = async (entity: EntityName, slug: string, excludeId?: string) => {
+  switch (entity) {
+    case "category":
+      return Boolean(
+        await prisma.category.findFirst({
+          where: {
+            slug,
+            ...(excludeId ? { NOT: { id: excludeId } } : {}),
+          },
+          select: {
+            id: true,
+          },
+        })
+      );
+    case "brand":
+      return Boolean(
+        await prisma.brand.findFirst({
+          where: {
+            slug,
+            ...(excludeId ? { NOT: { id: excludeId } } : {}),
+          },
+          select: {
+            id: true,
+          },
+        })
+      );
+    case "product":
+      return Boolean(
+        await prisma.product.findFirst({
+          where: {
+            slug,
+            ...(excludeId ? { NOT: { id: excludeId } } : {}),
+          },
+          select: {
+            id: true,
+          },
+        })
+      );
+  }
+};
+
+const generateUniqueSlug = async (
+  entity: EntityName,
+  source: string,
+  excludeId?: string
+) => {
+  const baseSlug = slugify(source);
+  let candidate = baseSlug;
+  let index = 2;
+
+  while (await slugExists(entity, candidate, excludeId)) {
+    candidate = `${baseSlug}-${index}`;
+    index += 1;
+  }
+
+  return candidate;
+};
+
+const promoCodeExists = async (code: string, excludeId?: string) =>
+  Boolean(
+    await prisma.promoCode.findFirst({
+      where: {
+        code,
+        ...(excludeId ? { NOT: { id: excludeId } } : {}),
+      },
+      select: {
+        id: true,
+      },
+    })
+  );
+
+const generateUniquePromoCode = async (source: string, excludeId?: string) => {
+  const baseCode = promoCodeify(source);
+  let candidate = baseCode;
+  let index = 2;
+
+  while (await promoCodeExists(candidate, excludeId)) {
+    candidate = `${baseCode}-${index}`;
+    index += 1;
+  }
+
+  return candidate;
+};
+
+const deriveProductStatus = (discount: number, featured: boolean): ProductStatus => {
+  if (discount > 0) {
+    return "sale";
+  }
+
+  if (featured) {
+    return "hot";
+  }
+
+  return "new";
+};
+
+const getValidCategoryRecords = async (categoryIds: string[]) => {
+  const categories = await prisma.category.findMany({
+    where: {
+      id: {
+        in: categoryIds,
+      },
+    },
+    select: {
+      id: true,
+      slug: true,
+      title: true,
+    },
   });
 
-  const query = search.toString();
-  redirect(`/admin${query ? `?${query}` : ""}${hash ? `#${hash}` : ""}`);
+  if (!categories.length || categories.length !== categoryIds.length) {
+    throw new Error("Merci de choisir au moins une categorie valide.");
+  }
+
+  return categories;
 };
 
-const refreshStorefront = () => {
-  revalidatePath("/admin");
-  revalidatePath("/", "layout");
-  revalidatePath("/");
-  revalidatePath("/shop");
-  revalidatePath("/deal");
-  revalidatePath("/brand/[slug]", "page");
-  revalidatePath("/category/[slug]", "page");
-  revalidatePath("/product/[slug]", "page");
+const getValidBrandRecord = async (brandId: string | null) => {
+  if (!brandId) {
+    return null;
+  }
+
+  const brand = await prisma.brand.findUnique({
+    where: {
+      id: brandId,
+    },
+    select: {
+      id: true,
+      slug: true,
+      title: true,
+    },
+  });
+
+  if (!brand) {
+    throw new Error("La marque selectionnee est introuvable.");
+  }
+
+  return brand;
 };
 
 export async function createCategoryAction(formData: FormData) {
-  await requireAdmin();
+  return withAction("categories", "Impossible d'ajouter cette categorie.", async () => {
+    const title = readText(formData, "title");
+    const description = readOptionalText(formData, "description");
+    const featured = readBoolean(formData, "featured");
+    const imageFile = formData.get("imageFile");
 
-  const title = String(formData.get("title") || "").trim();
-  const rawSlug = String(formData.get("slug") || "").trim();
-  const slug = normalizeSlug(rawSlug || title);
-  const description = String(formData.get("description") || "").trim() || null;
-  const rangeRaw = String(formData.get("range") || "").trim();
-  const manualImageUrl = String(formData.get("imageUrl") || "").trim() || null;
-  const imageFile = formData.get("imageFile");
-  const featured = formData.get("featured") === "on";
+    if (!title) {
+      throw new Error("Veuillez saisir le nom de la categorie.");
+    }
 
-  if (!title) {
-    adminRedirect({ error: "Le titre de categorie est obligatoire." }, "categories");
-  }
+    const slug = await generateUniqueSlug("category", title);
+    let uploadedImage: UploadedAsset | null = null;
 
-  if (!slug) {
-    adminRedirect({ error: "Le slug de categorie est obligatoire." }, "categories");
-  }
+    try {
+      if (isUploadedFile(imageFile)) {
+        uploadedImage = await saveOptimizedImage(imageFile, "categories", title);
+      }
 
-  const range = rangeRaw ? Number(rangeRaw) : null;
-  if (rangeRaw && !Number.isInteger(range)) {
-    adminRedirect({ error: "Le champ range doit etre un entier." }, "categories");
-  }
+      await prisma.category.create({
+        data: {
+          title,
+          slug,
+          description,
+          featured,
+          imageUrl: uploadedImage?.url || null,
+        },
+      });
+    } catch (error) {
+      if (uploadedImage?.url) {
+        await deleteStoredAsset(uploadedImage.url);
+      }
 
-  try {
-    const imageUrl = isUploadedFile(imageFile)
-      ? await saveImageFile(imageFile, "categories", slug || title)
-      : manualImageUrl;
+      throw error;
+    }
 
-    await prisma.category.create({
-      data: {
-        title,
-        slug,
-        description,
-        range,
-        featured,
-        imageUrl,
+    refreshStorefront([`/category/${slug}`]);
+    adminRedirect("categories", {
+      status: "Categorie ajoutee.",
+    });
+  });
+}
+
+export async function updateCategoryAction(formData: FormData) {
+  return withAction("categories", "Impossible de modifier cette categorie.", async () => {
+    const id = requireId(readText(formData, "id"), "Categorie introuvable.");
+    const title = readText(formData, "title");
+    const description = readOptionalText(formData, "description");
+    const featured = readBoolean(formData, "featured");
+    const imageFile = formData.get("imageFile");
+
+    if (!title) {
+      throw new Error("Veuillez saisir le nom de la categorie.");
+    }
+
+    const existingCategory = await prisma.category.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        slug: true,
+        imageUrl: true,
       },
     });
 
-    refreshStorefront();
-    adminRedirect({ status: "category-created" }, "categories");
-  } catch (error) {
-    adminRedirect({ error: getErrorMessage(error) }, "categories");
-  }
+    if (!existingCategory) {
+      throw new Error("Cette categorie n'existe plus.");
+    }
+
+    let uploadedImage: UploadedAsset | null = null;
+
+    try {
+      if (isUploadedFile(imageFile)) {
+        uploadedImage = await saveOptimizedImage(imageFile, "categories", title);
+      }
+
+      await prisma.category.update({
+        where: {
+          id,
+        },
+        data: {
+          title,
+          description,
+          featured,
+          ...(uploadedImage?.url
+            ? {
+                imageUrl: uploadedImage.url,
+              }
+            : {}),
+        },
+      });
+    } catch (error) {
+      if (uploadedImage?.url) {
+        await deleteStoredAsset(uploadedImage.url);
+      }
+
+      throw error;
+    }
+
+    if (uploadedImage?.url && existingCategory.imageUrl) {
+      await deleteStoredAsset(existingCategory.imageUrl);
+    }
+
+    refreshStorefront([`/category/${existingCategory.slug}`]);
+    adminRedirect("categories", {
+      status: "Categorie mise a jour.",
+    });
+  });
+}
+
+export async function deleteCategoryAction(formData: FormData) {
+  return withAction("categories", "Impossible de supprimer cette categorie.", async () => {
+    const id = requireId(readText(formData, "id"), "Categorie introuvable.");
+    const category = await prisma.category.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        slug: true,
+        imageUrl: true,
+      },
+    });
+
+    if (!category) {
+      throw new Error("Cette categorie n'existe plus.");
+    }
+
+    await prisma.category.delete({
+      where: {
+        id,
+      },
+    });
+
+    await deleteStoredAsset(category.imageUrl);
+    refreshStorefront([`/category/${category.slug}`]);
+    adminRedirect("categories", {
+      status: "Categorie supprimee.",
+    });
+  });
 }
 
 export async function createBrandAction(formData: FormData) {
-  await requireAdmin();
+  return withAction("brands", "Impossible d'ajouter cette marque.", async () => {
+    const title = readText(formData, "title");
+    const description = readOptionalText(formData, "description");
+    const imageFile = formData.get("imageFile");
 
-  const title = String(formData.get("title") || "").trim();
-  const rawSlug = String(formData.get("slug") || "").trim();
-  const slug = normalizeSlug(rawSlug || title);
-  const description = String(formData.get("description") || "").trim() || null;
-  const manualImageUrl = String(formData.get("imageUrl") || "").trim() || null;
-  const imageFile = formData.get("imageFile");
+    if (!title) {
+      throw new Error("Veuillez saisir le nom de la marque.");
+    }
 
-  if (!title) {
-    adminRedirect({ error: "Le titre de marque est obligatoire." }, "brands");
-  }
+    const slug = await generateUniqueSlug("brand", title);
+    let uploadedImage: UploadedAsset | null = null;
 
-  if (!slug) {
-    adminRedirect({ error: "Le slug de marque est obligatoire." }, "brands");
-  }
+    try {
+      if (isUploadedFile(imageFile)) {
+        uploadedImage = await saveOptimizedImage(imageFile, "brands", title);
+      }
 
-  try {
-    const imageUrl = isUploadedFile(imageFile)
-      ? await saveImageFile(imageFile, "brands", slug || title)
-      : manualImageUrl;
+      await prisma.brand.create({
+        data: {
+          title,
+          slug,
+          description,
+          imageUrl: uploadedImage?.url || null,
+        },
+      });
+    } catch (error) {
+      if (uploadedImage?.url) {
+        await deleteStoredAsset(uploadedImage.url);
+      }
 
-    await prisma.brand.create({
-      data: {
-        title,
-        slug,
-        description,
-        imageUrl,
+      throw error;
+    }
+
+    refreshStorefront([`/brand/${slug}`]);
+    adminRedirect("brands", {
+      status: "Marque ajoutee.",
+    });
+  });
+}
+
+export async function updateBrandAction(formData: FormData) {
+  return withAction("brands", "Impossible de modifier cette marque.", async () => {
+    const id = requireId(readText(formData, "id"), "Marque introuvable.");
+    const title = readText(formData, "title");
+    const description = readOptionalText(formData, "description");
+    const imageFile = formData.get("imageFile");
+
+    if (!title) {
+      throw new Error("Veuillez saisir le nom de la marque.");
+    }
+
+    const existingBrand = await prisma.brand.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        slug: true,
+        imageUrl: true,
       },
     });
 
-    refreshStorefront();
-    adminRedirect({ status: "brand-created" }, "brands");
-  } catch (error) {
-    adminRedirect({ error: getErrorMessage(error) }, "brands");
-  }
+    if (!existingBrand) {
+      throw new Error("Cette marque n'existe plus.");
+    }
+
+    let uploadedImage: UploadedAsset | null = null;
+
+    try {
+      if (isUploadedFile(imageFile)) {
+        uploadedImage = await saveOptimizedImage(imageFile, "brands", title);
+      }
+
+      await prisma.brand.update({
+        where: {
+          id,
+        },
+        data: {
+          title,
+          description,
+          ...(uploadedImage?.url
+            ? {
+                imageUrl: uploadedImage.url,
+              }
+            : {}),
+        },
+      });
+    } catch (error) {
+      if (uploadedImage?.url) {
+        await deleteStoredAsset(uploadedImage.url);
+      }
+
+      throw error;
+    }
+
+    if (uploadedImage?.url && existingBrand.imageUrl) {
+      await deleteStoredAsset(existingBrand.imageUrl);
+    }
+
+    refreshStorefront([`/brand/${existingBrand.slug}`]);
+    adminRedirect("brands", {
+      status: "Marque mise a jour.",
+    });
+  });
+}
+
+export async function deleteBrandAction(formData: FormData) {
+  return withAction("brands", "Impossible de supprimer cette marque.", async () => {
+    const id = requireId(readText(formData, "id"), "Marque introuvable.");
+    const brand = await prisma.brand.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        slug: true,
+        imageUrl: true,
+      },
+    });
+
+    if (!brand) {
+      throw new Error("Cette marque n'existe plus.");
+    }
+
+    await prisma.brand.delete({
+      where: {
+        id,
+      },
+    });
+
+    await deleteStoredAsset(brand.imageUrl);
+    refreshStorefront([`/brand/${brand.slug}`]);
+    adminRedirect("brands", {
+      status: "Marque supprimee.",
+    });
+  });
 }
 
 export async function createProductAction(formData: FormData) {
-  await requireAdmin();
+  return withAction("products", "Impossible d'ajouter ce produit.", async () => {
+    const name = readText(formData, "name");
+    const description = readOptionalText(formData, "description");
+    const price = readDecimal(formData, "price", { min: 0.01 });
+    const discount = readInteger(formData, "discount", {
+      min: 0,
+      max: 100,
+      defaultValue: 0,
+    });
+    const stock = readInteger(formData, "stock", { min: 0 });
+    const brandId = readOptionalText(formData, "brandId");
+    const categoryIds = readStringList(formData, "categoryIds");
+    const imageFiles = readUploadedFiles(formData, "imageFiles");
+    const isFeatured = readBoolean(formData, "isFeatured");
 
-  const name = String(formData.get("name") || "").trim();
-  const rawSlug = String(formData.get("slug") || "").trim();
-  const slug = normalizeSlug(rawSlug || name);
-  const description = String(formData.get("description") || "").trim() || null;
-  const price = parseNumber(formData.get("price"), NaN);
-  const discount = parseNumber(formData.get("discount"), 0);
-  const stock = parseNumber(formData.get("stock"), 0);
-  const statusValue = String(formData.get("status") || "new") as ProductStatus;
-  const isFeatured = formData.get("isFeatured") === "on";
-  const brandId = String(formData.get("brandId") || "").trim() || null;
-  const categoryIds = formData
-    .getAll("categoryIds")
-    .map((value) => String(value).trim())
-    .filter(Boolean);
-  const manualImageUrls = String(formData.get("imageUrls") || "")
-    .split(/\r?\n|,/)
-    .map((value) => value.trim())
-    .filter(Boolean);
-  const imageFiles = formData
-    .getAll("imageFiles")
-    .filter((value): value is File => isUploadedFile(value));
+    if (!name) {
+      throw new Error("Veuillez saisir le nom du produit.");
+    }
 
-  if (!name) {
-    adminRedirect({ error: "Le nom du produit est obligatoire." }, "products");
-  }
+    if (!categoryIds.length) {
+      throw new Error("Choisissez au moins une categorie pour ce produit.");
+    }
 
-  if (!slug) {
-    adminRedirect({ error: "Le slug du produit est obligatoire." }, "products");
-  }
+    if (!imageFiles.length) {
+      throw new Error("Ajoutez au moins une photo du produit.");
+    }
 
-  if (!Number.isFinite(price) || price <= 0) {
-    adminRedirect({ error: "Le prix du produit doit etre superieur a zero." }, "products");
-  }
+    if (imageFiles.length > 6) {
+      throw new Error("Vous pouvez importer jusqu'a 6 photos par produit.");
+    }
 
-  if (!Number.isInteger(stock) || stock < 0) {
-    adminRedirect({ error: "Le stock doit etre un entier positif." }, "products");
-  }
+    const [categories, brand] = await Promise.all([
+      getValidCategoryRecords(categoryIds),
+      getValidBrandRecord(brandId),
+    ]);
+    const slug = await generateUniqueSlug("product", name);
+    let uploadedImages: UploadedAsset[] = [];
 
-  if (!Number.isInteger(discount) || discount < 0) {
-    adminRedirect({ error: "La remise doit etre un entier positif." }, "products");
-  }
+    try {
+      uploadedImages = await Promise.all(
+        imageFiles.map((file) => saveOptimizedImage(file, "products", name))
+      );
 
-  if (!["new", "hot", "sale"].includes(statusValue)) {
-    adminRedirect({ error: "Le statut du produit est invalide." }, "products");
-  }
+      await prisma.$transaction(async (tx) => {
+        const product = await tx.product.create({
+          data: {
+            name,
+            slug,
+            description,
+            price,
+            discount,
+            stock,
+            status: deriveProductStatus(discount, isFeatured),
+            isFeatured,
+            brandId: brand?.id || null,
+          },
+          select: {
+            id: true,
+          },
+        });
 
-  if (!categoryIds.length) {
-    adminRedirect({ error: "Selectionnez au moins une categorie." }, "products");
-  }
+        await tx.productCategory.createMany({
+          data: categories.map((category) => ({
+            productId: product.id,
+            categoryId: category.id,
+          })),
+        });
 
-  if (!manualImageUrls.length && !imageFiles.length) {
-    adminRedirect({ error: "Ajoutez au moins une image produit." }, "products");
-  }
-
-  try {
-    const uploadedImageUrls = await Promise.all(
-      imageFiles.map((file, index) =>
-        saveImageFile(file, "products", `${slug || name}-${index + 1}`)
-      )
-    );
-    const imageUrls = [...uploadedImageUrls, ...manualImageUrls];
-
-    await prisma.product.create({
-      data: {
-        name,
-        slug,
-        description,
-        price: new Prisma.Decimal(price),
-        discount,
-        stock,
-        status: statusValue,
-        isFeatured,
-        brandId,
-        images: {
-          create: imageUrls.map((url, index) => ({
-            url,
+        await tx.productImage.createMany({
+          data: uploadedImages.map((image, index) => ({
+            productId: product.id,
+            url: image.url,
             altText: name,
             sortOrder: index,
           })),
+        });
+      });
+    } catch (error) {
+      if (uploadedImages.length > 0) {
+        await deleteStoredAssets(uploadedImages.map((image) => image.url));
+      }
+
+      throw error;
+    }
+
+    refreshStorefront([
+      `/product/${slug}`,
+      ...categories.map((category) => `/category/${category.slug}`),
+      brand ? `/brand/${brand.slug}` : null,
+    ]);
+    adminRedirect("products", {
+      status: "Produit ajoute.",
+    });
+  });
+}
+
+export async function updateProductAction(formData: FormData) {
+  return withAction("products", "Impossible de modifier ce produit.", async () => {
+    const id = requireId(readText(formData, "id"), "Produit introuvable.");
+    const name = readText(formData, "name");
+    const description = readOptionalText(formData, "description");
+    const price = readDecimal(formData, "price", { min: 0.01 });
+    const discount = readInteger(formData, "discount", {
+      min: 0,
+      max: 100,
+      defaultValue: 0,
+    });
+    const stock = readInteger(formData, "stock", { min: 0 });
+    const brandId = readOptionalText(formData, "brandId");
+    const categoryIds = readStringList(formData, "categoryIds");
+    const imageFiles = readUploadedFiles(formData, "imageFiles");
+    const isFeatured = readBoolean(formData, "isFeatured");
+
+    if (!name) {
+      throw new Error("Veuillez saisir le nom du produit.");
+    }
+
+    if (!categoryIds.length) {
+      throw new Error("Choisissez au moins une categorie pour ce produit.");
+    }
+
+    if (imageFiles.length > 6) {
+      throw new Error("Vous pouvez importer jusqu'a 6 photos par produit.");
+    }
+
+    const existingProduct = await prisma.product.findUnique({
+      where: {
+        id,
+      },
+      include: {
+        brand: {
+          select: {
+            slug: true,
+          },
         },
         categories: {
-          create: categoryIds.map((categoryId) => ({
-            categoryId,
-          })),
+          include: {
+            category: {
+              select: {
+                slug: true,
+              },
+            },
+          },
+        },
+        images: {
+          orderBy: {
+            sortOrder: "asc",
+          },
+          select: {
+            url: true,
+          },
         },
       },
     });
 
-    refreshStorefront();
-    adminRedirect({ status: "product-created" }, "products");
-  } catch (error) {
-    adminRedirect({ error: getErrorMessage(error) }, "products");
-  }
+    if (!existingProduct) {
+      throw new Error("Ce produit n'existe plus.");
+    }
+
+    const [categories, brand] = await Promise.all([
+      getValidCategoryRecords(categoryIds),
+      getValidBrandRecord(brandId),
+    ]);
+
+    let uploadedImages: UploadedAsset[] = [];
+
+    try {
+      if (imageFiles.length > 0) {
+        uploadedImages = await Promise.all(
+          imageFiles.map((file) => saveOptimizedImage(file, "products", name))
+        );
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.product.update({
+          where: {
+            id,
+          },
+          data: {
+            name,
+            description,
+            price,
+            discount,
+            stock,
+            status: deriveProductStatus(discount, isFeatured),
+            isFeatured,
+            brandId: brand?.id || null,
+          },
+        });
+
+        await tx.productCategory.deleteMany({
+          where: {
+            productId: id,
+          },
+        });
+
+        await tx.productCategory.createMany({
+          data: categories.map((category) => ({
+            productId: id,
+            categoryId: category.id,
+          })),
+        });
+
+        if (uploadedImages.length > 0) {
+          await tx.productImage.deleteMany({
+            where: {
+              productId: id,
+            },
+          });
+
+          await tx.productImage.createMany({
+            data: uploadedImages.map((image, index) => ({
+              productId: id,
+              url: image.url,
+              altText: name,
+              sortOrder: index,
+            })),
+          });
+        }
+      });
+    } catch (error) {
+      if (uploadedImages.length > 0) {
+        await deleteStoredAssets(uploadedImages.map((image) => image.url));
+      }
+
+      throw error;
+    }
+
+    if (uploadedImages.length > 0) {
+      await deleteStoredAssets(existingProduct.images.map((image) => image.url));
+    }
+
+    refreshStorefront([
+      `/product/${existingProduct.slug}`,
+      ...existingProduct.categories.map((item) => `/category/${item.category.slug}`),
+      ...categories.map((category) => `/category/${category.slug}`),
+      existingProduct.brand?.slug ? `/brand/${existingProduct.brand.slug}` : null,
+      brand ? `/brand/${brand.slug}` : null,
+    ]);
+    adminRedirect("products", {
+      status: "Produit mis a jour.",
+    });
+  });
+}
+
+export async function deleteProductAction(formData: FormData) {
+  return withAction("products", "Impossible de supprimer ce produit.", async () => {
+    const id = requireId(readText(formData, "id"), "Produit introuvable.");
+    const product = await prisma.product.findUnique({
+      where: {
+        id,
+      },
+      include: {
+        brand: {
+          select: {
+            slug: true,
+          },
+        },
+        categories: {
+          include: {
+            category: {
+              select: {
+                slug: true,
+              },
+            },
+          },
+        },
+        images: {
+          select: {
+            url: true,
+          },
+        },
+      },
+    });
+
+    if (!product) {
+      throw new Error("Ce produit n'existe plus.");
+    }
+
+    await prisma.product.delete({
+      where: {
+        id,
+      },
+    });
+
+    await deleteStoredAssets(product.images.map((image) => image.url));
+    refreshStorefront([
+      `/product/${product.slug}`,
+      ...product.categories.map((item) => `/category/${item.category.slug}`),
+      product.brand?.slug ? `/brand/${product.brand.slug}` : null,
+    ]);
+    adminRedirect("products", {
+      status: "Produit supprime.",
+    });
+  });
 }
 
 export async function createPromoCodeAction(formData: FormData) {
-  await requireAdmin();
+  return withAction("promos", "Impossible d'ajouter ce code promo.", async () => {
+    const title = readText(formData, "title");
+    const requestedCode = readText(formData, "code");
+    const discountValue = readInteger(formData, "discountValue", {
+      min: 1,
+      max: 100,
+    });
+    const endsAt = readDate(formData, "endsAt");
+    const active = readBoolean(formData, "active");
 
-  const title = String(formData.get("title") || "").trim();
-  const rawCode = String(formData.get("code") || "").trim();
-  const code = normalizePromoCode(rawCode || title);
-  const active = formData.get("active") === "on";
-  const discountType = String(formData.get("discountType") || "percentage") as PromoDiscountType;
-  const discountValue = parseNumber(formData.get("discountValue"), NaN);
-  const minimumOrderAmount = parseNumber(formData.get("minimumOrderAmount"), 0);
-  const usageLimitRaw = String(formData.get("usageLimit") || "").trim();
-  const usageLimit = usageLimitRaw ? Number(usageLimitRaw) : null;
-  const startsAt = parseOptionalDate(formData.get("startsAt"));
-  const endsAt = parseOptionalDate(formData.get("endsAt"));
-  const allowedPaymentMethods = formData
-    .getAll("allowedPaymentMethods")
-    .map((value) => String(value))
-    .filter((value): value is PaymentMethod =>
-      ["cod", "cmi_card", "installments"].includes(value)
-    );
+    if (!title) {
+      throw new Error("Veuillez saisir un nom pour ce code promo.");
+    }
 
-  if (!title) {
-    adminRedirect({ error: "Le titre du code promo est obligatoire." }, "promos");
-  }
+    const code = await generateUniquePromoCode(requestedCode || title);
 
-  if (!code) {
-    adminRedirect({ error: "Le code promo est obligatoire." }, "promos");
-  }
-
-  if (!["percentage", "fixed"].includes(discountType)) {
-    adminRedirect({ error: "Le type de reduction est invalide." }, "promos");
-  }
-
-  if (!Number.isFinite(discountValue) || discountValue <= 0) {
-    adminRedirect({ error: "La valeur de reduction doit etre superieure a zero." }, "promos");
-  }
-
-  if (!allowedPaymentMethods.length) {
-    adminRedirect(
-      { error: "Choisissez au moins un moyen de paiement autorise." },
-      "promos"
-    );
-  }
-
-  if (usageLimit !== null && (!Number.isInteger(usageLimit) || usageLimit < 1)) {
-    adminRedirect({ error: "La limite d'utilisation doit etre un entier positif." }, "promos");
-  }
-
-  if (startsAt && endsAt && startsAt > endsAt) {
-    adminRedirect({ error: "La date de fin doit etre apres la date de debut." }, "promos");
-  }
-
-  try {
     await prisma.promoCode.create({
       data: {
         title,
         code,
         active,
-        discountType,
-        discountValue: new Prisma.Decimal(discountValue),
-        minimumOrderAmount: new Prisma.Decimal(minimumOrderAmount),
-        allowedPaymentMethods,
-        startsAt,
+        discountType: "percentage",
+        discountValue,
+        minimumOrderAmount: 0,
+        allowedPaymentMethods: allPaymentMethods,
         endsAt,
-        usageLimit,
       },
     });
 
     refreshStorefront();
-    adminRedirect({ status: "promo-created" }, "promos");
-  } catch (error) {
-    adminRedirect({ error: getErrorMessage(error) }, "promos");
-  }
+    adminRedirect("promos", {
+      status: "Code promo ajoute.",
+    });
+  });
 }
 
-export async function deleteCategoryAction(formData: FormData) {
-  await requireAdmin();
+export async function updatePromoCodeAction(formData: FormData) {
+  return withAction("promos", "Impossible de modifier ce code promo.", async () => {
+    const id = requireId(readText(formData, "id"), "Code promo introuvable.");
+    const title = readText(formData, "title");
+    const requestedCode = readText(formData, "code");
+    const discountValue = readInteger(formData, "discountValue", {
+      min: 1,
+      max: 100,
+    });
+    const endsAt = readDate(formData, "endsAt");
+    const active = readBoolean(formData, "active");
 
-  const id = String(formData.get("id") || "").trim();
+    if (!title) {
+      throw new Error("Veuillez saisir un nom pour ce code promo.");
+    }
 
-  if (!id) {
-    adminRedirect({ error: "Categorie introuvable." }, "categories");
-  }
+    const existingPromo = await prisma.promoCode.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        id: true,
+      },
+    });
 
-  try {
-    await prisma.category.delete({
-      where: { id },
+    if (!existingPromo) {
+      throw new Error("Ce code promo n'existe plus.");
+    }
+
+    const code = await generateUniquePromoCode(requestedCode || title, id);
+
+    await prisma.promoCode.update({
+      where: {
+        id,
+      },
+      data: {
+        title,
+        code,
+        active,
+        discountType: "percentage",
+        discountValue,
+        minimumOrderAmount: 0,
+        allowedPaymentMethods: allPaymentMethods,
+        startsAt: null,
+        endsAt,
+        usageLimit: null,
+      },
     });
 
     refreshStorefront();
-    adminRedirect({ status: "category-deleted" }, "categories");
-  } catch (error) {
-    adminRedirect({ error: getErrorMessage(error) }, "categories");
-  }
-}
-
-export async function deleteProductAction(formData: FormData) {
-  await requireAdmin();
-
-  const id = String(formData.get("id") || "").trim();
-
-  if (!id) {
-    adminRedirect({ error: "Produit introuvable." }, "products");
-  }
-
-  try {
-    await prisma.product.delete({
-      where: { id },
+    adminRedirect("promos", {
+      status: "Code promo mis a jour.",
     });
-
-    refreshStorefront();
-    adminRedirect({ status: "product-deleted" }, "products");
-  } catch (error) {
-    adminRedirect({ error: getErrorMessage(error) }, "products");
-  }
-}
-
-export async function deleteBrandAction(formData: FormData) {
-  await requireAdmin();
-
-  const id = String(formData.get("id") || "").trim();
-
-  if (!id) {
-    adminRedirect({ error: "Marque introuvable." }, "brands");
-  }
-
-  try {
-    await prisma.brand.delete({
-      where: { id },
-    });
-
-    refreshStorefront();
-    adminRedirect({ status: "brand-deleted" }, "brands");
-  } catch (error) {
-    adminRedirect({ error: getErrorMessage(error) }, "brands");
-  }
+  });
 }
 
 export async function deletePromoCodeAction(formData: FormData) {
-  await requireAdmin();
+  return withAction("promos", "Impossible de supprimer ce code promo.", async () => {
+    const id = requireId(readText(formData, "id"), "Code promo introuvable.");
 
-  const id = String(formData.get("id") || "").trim();
-
-  if (!id) {
-    adminRedirect({ error: "Code promo introuvable." }, "promos");
-  }
-
-  try {
     await prisma.promoCode.delete({
-      where: { id },
+      where: {
+        id,
+      },
     });
 
     refreshStorefront();
-    adminRedirect({ status: "promo-deleted" }, "promos");
-  } catch (error) {
-    adminRedirect({ error: getErrorMessage(error) }, "promos");
-  }
+    adminRedirect("promos", {
+      status: "Code promo supprime.",
+    });
+  });
+}
+
+export async function updateOrderStatusAction(formData: FormData) {
+  return withAction("orders", "Impossible de mettre a jour cette commande.", async () => {
+    const id = requireId(readText(formData, "id"), "Commande introuvable.");
+    const nextStage = readText(formData, "status");
+    const allowedStages = new Set(adminOrderStageOptions.map((option) => option.value));
+
+    if (!allowedStages.has(nextStage as (typeof adminOrderStageOptions)[number]["value"])) {
+      throw new Error("Le statut choisi n'est pas valide.");
+    }
+
+    const order = await prisma.order.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        paymentMethod: true,
+        paymentStatus: true,
+      },
+    });
+
+    if (!order) {
+      throw new Error("Cette commande n'existe plus.");
+    }
+
+    const status = adminStageToOrderStatus(
+      nextStage as (typeof adminOrderStageOptions)[number]["value"]
+    );
+
+    await prisma.order.update({
+      where: {
+        id,
+      },
+      data: {
+        status,
+        ...(status === "delivered" &&
+        order.paymentMethod === "cod" &&
+        order.paymentStatus !== "paid"
+          ? {
+              paymentStatus: "paid",
+            }
+          : {}),
+      },
+    });
+
+    refreshStorefront(["/orders"]);
+    adminRedirect("orders", {
+      status: "Statut de commande mis a jour.",
+    });
+  });
 }

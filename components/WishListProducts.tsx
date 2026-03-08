@@ -15,9 +15,13 @@ import AddToCartButton from "./AddToCartButton";
 
 const WishListProducts = () => {
   const [visibleProducts, setVisibleProducts] = useState(7);
-  const { favoriteProduct, removeFromFavorite, resetFavorite } = useStore();
+  const favoriteProduct = useStore((state) => state.favoriteProduct);
+  const removeFromFavorite = useStore((state) => state.removeFromFavorite);
+  const resetFavorite = useStore((state) => state.resetFavorite);
+  const hasHydrated = useStore((state) => state.hasHydrated);
+  const safeFavorites = hasHydrated ? favoriteProduct : [];
   const loadMore = () => {
-    setVisibleProducts((prev) => Math.min(prev + 5, favoriteProduct.length));
+    setVisibleProducts((prev) => Math.min(prev + 5, safeFavorites.length));
   };
 
   const handleResetWishlist = () => {
@@ -32,7 +36,19 @@ const WishListProducts = () => {
 
   return (
     <Container>
-      {favoriteProduct?.length > 0 ? (
+      {!hasHydrated ? (
+        <div className="flex min-h-100 flex-col items-center justify-center space-y-3 px-4 text-center">
+          <Heart className="h-12 w-12 text-muted-foreground" strokeWidth={1.5} />
+          <div className="space-y-2">
+            <h2 className="text-2xl font-semibold tracking-tight">
+              Chargement de votre liste de souhaits
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Nous recuperons vos produits enregistres.
+            </p>
+          </div>
+        </div>
+      ) : safeFavorites.length > 0 ? (
         <>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
@@ -48,7 +64,7 @@ const WishListProducts = () => {
                 </tr>
               </thead>
               <tbody>
-                {favoriteProduct
+                {safeFavorites
                   ?.slice(0, visibleProducts)
                   ?.map((product: Product) => (
                     <tr key={product?._id} className="border-b">
@@ -109,7 +125,7 @@ const WishListProducts = () => {
             </table>
           </div>
           <div className="flex items-center gap-2">
-            {visibleProducts < favoriteProduct?.length && (
+            {visibleProducts < safeFavorites.length && (
               <div className="my-5">
                 <Button variant="outline" onClick={loadMore}>
                   Voir plus
@@ -127,7 +143,7 @@ const WishListProducts = () => {
               </div>
             )}
           </div>
-          {favoriteProduct?.length > 0 && (
+          {safeFavorites.length > 0 && (
             <Button
               onClick={handleResetWishlist}
               className="mb-5 font-semibold"

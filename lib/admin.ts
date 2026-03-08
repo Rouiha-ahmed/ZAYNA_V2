@@ -1,9 +1,9 @@
 import {
-  Prisma,
   LoyaltyTier,
   OrderStatus,
   PaymentMethod,
   PaymentStatus,
+  Prisma,
   ProductStatus,
   PromoDiscountType,
 } from "@prisma/client";
@@ -45,10 +45,18 @@ const primaryEmailFromUser = (user: Awaited<ReturnType<typeof currentUser>>) => 
   );
 };
 
+export type AdminOrderStage =
+  | "pending"
+  | "confirmed"
+  | "preparing"
+  | "shipped"
+  | "delivered"
+  | "cancelled";
+
 export const productStatusOptions = [
   { value: "new", label: "Nouveau" },
   { value: "hot", label: "Tendance" },
-  { value: "sale", label: "Promo" },
+  { value: "sale", label: "Promotion" },
 ] as const satisfies ReadonlyArray<{ value: ProductStatus; label: string }>;
 
 export const promoDiscountTypeOptions = [
@@ -67,6 +75,74 @@ export const paymentMethodOptions = [
   value: PaymentMethod;
   label: string;
 }>;
+
+export const adminOrderStageOptions = [
+  { value: "pending", label: "En attente" },
+  { value: "confirmed", label: "Confirmee" },
+  { value: "preparing", label: "En preparation" },
+  { value: "shipped", label: "Expediee" },
+  { value: "delivered", label: "Livree" },
+  { value: "cancelled", label: "Annulee" },
+] as const satisfies ReadonlyArray<{ value: AdminOrderStage; label: string }>;
+
+export const getAdminOrderStage = (status: OrderStatus): AdminOrderStage => {
+  switch (status) {
+    case "processing":
+      return "confirmed";
+    case "paid":
+      return "preparing";
+    case "shipped":
+    case "out_for_delivery":
+      return "shipped";
+    case "delivered":
+      return "delivered";
+    case "cancelled":
+      return "cancelled";
+    case "pending":
+    default:
+      return "pending";
+  }
+};
+
+export const adminStageToOrderStatus = (stage: AdminOrderStage): OrderStatus => {
+  switch (stage) {
+    case "confirmed":
+      return "processing";
+    case "preparing":
+      return "paid";
+    case "shipped":
+      return "shipped";
+    case "delivered":
+      return "delivered";
+    case "cancelled":
+      return "cancelled";
+    case "pending":
+    default:
+      return "pending";
+  }
+};
+
+const buildOrderStageBreakdown = (counts: Partial<Record<OrderStatus, number>>) =>
+  adminOrderStageOptions.map((option) => {
+    const count =
+      option.value === "pending"
+        ? counts.pending || 0
+        : option.value === "confirmed"
+          ? counts.processing || 0
+          : option.value === "preparing"
+            ? counts.paid || 0
+            : option.value === "shipped"
+              ? (counts.shipped || 0) + (counts.out_for_delivery || 0)
+              : option.value === "delivered"
+                ? counts.delivered || 0
+                : counts.cancelled || 0;
+
+    return {
+      status: option.value,
+      label: option.label,
+      count,
+    };
+  });
 
 export type AdminIdentity = {
   userId: string | null;
@@ -166,28 +242,45 @@ export type AdminDashboardData = {
     pendingOrders: number;
     totalProducts: number;
     totalCategories: number;
+    totalBrands: number;
     activePromoCodes: number;
+    expiringPromoCodes: number;
     lowStockProducts: number;
     totalCustomers: number;
   };
   categories: Array<{
     id: string;
     title: string;
-    slug: string;
+    description: string | null;
     featured: boolean;
     productCount: number;
+    imageUrl: string | null;
+    updatedAt: Date;
+  }>;
+  brands: Array<{
+    id: string;
+    title: string;
+    description: string | null;
+    productCount: number;
+    imageUrl: string | null;
     updatedAt: Date;
   }>;
   products: Array<{
     id: string;
     name: string;
-    slug: string;
+    description: string | null;
     price: number;
+    discount: number;
     stock: number;
     status: ProductStatus;
+    isFeatured: boolean;
+    brandId: string | null;
     brandTitle: string | null;
+    categoryIds: string[];
     categoryTitles: string[];
     imageUrl: string | null;
+    imageUrls: string[];
+    imagesCount: number;
     updatedAt: Date;
   }>;
   promoCodes: Array<{
@@ -197,42 +290,37 @@ export type AdminDashboardData = {
     active: boolean;
     discountType: PromoDiscountType;
     discountValue: number;
-    minimumOrderAmount: number;
-    usageLimit: number | null;
-    usedCount: number;
-    allowedPaymentMethods: PaymentMethod[];
     endsAt: Date | null;
     updatedAt: Date;
   }>;
-  brands: Array<{
-    id: string;
-    title: string;
-    slug: string;
-    imageUrl: string | null;
-    productCount: number;
-    updatedAt: Date;
-  }>;
-  recentOrders: Array<{
+  orders: Array<{
     id: string;
     orderNumber: string;
     customerName: string;
     email: string;
+    phone: string | null;
+    address: string | null;
+    city: string | null;
+    state: string | null;
+    zip: string | null;
     totalPrice: number;
-    status: string;
-    paymentStatus: string;
+    status: OrderStatus;
+    adminStage: AdminOrderStage;
+    paymentStatus: PaymentStatus;
     paymentMethod: PaymentMethod;
     orderDate: Date;
     itemsCount: number;
-    shippingCity: string | null;
+    items: Array<{
+      id: string;
+      name: string;
+      imageUrl: string | null;
+      quantity: number;
+      unitPrice: number;
+    }>;
   }>;
-  lowStockItems: Array<{
-    id: string;
-    name: string;
-    stock: number;
-    slug: string;
-  }>;
-  orderStatusBreakdown: Array<{
-    status: OrderStatus;
+  orderStageBreakdown: Array<{
+    status: AdminOrderStage;
+    label: string;
     count: number;
   }>;
   paymentStatusBreakdown: Array<{
@@ -251,6 +339,12 @@ export type AdminDashboardData = {
     lastOrderDate: Date | null;
     createdAt: Date;
   }>;
+  lowStockItems: Array<{
+    id: string;
+    name: string;
+    stock: number;
+    imageUrl: string | null;
+  }>;
 };
 
 export const getAdminDashboardData = async (): Promise<AdminDashboardData> => {
@@ -258,46 +352,31 @@ export const getAdminDashboardData = async (): Promise<AdminDashboardData> => {
 
   const [
     totalOrders,
-    pendingOrders,
     totalProducts,
     totalCategories,
+    totalBrands,
     activePromoCodes,
     totalCustomers,
-    lowStockProductsCount,
     paidRevenueAggregate,
     categories,
+    brands,
     products,
     promoCodes,
-    brands,
-    recentOrders,
+    orders,
     lowStockItems,
-    orderStatusBreakdown,
     paymentStatusBreakdown,
     customers,
   ] = await Promise.all([
     prisma.order.count(),
-    prisma.order.count({
-      where: {
-        status: {
-          in: ["pending", "processing", "out_for_delivery"],
-        },
-      },
-    }),
     prisma.product.count(),
     prisma.category.count(),
+    prisma.brand.count(),
     prisma.promoCode.count({
       where: {
         active: true,
       },
     }),
     prisma.user.count(),
-    prisma.product.count({
-      where: {
-        stock: {
-          lte: 5,
-        },
-      },
-    }),
     prisma.order.aggregate({
       where: {
         paymentStatus: "paid",
@@ -308,7 +387,19 @@ export const getAdminDashboardData = async (): Promise<AdminDashboardData> => {
     }),
     prisma.category.findMany({
       orderBy: {
-        updatedAt: "desc",
+        title: "asc",
+      },
+      include: {
+        _count: {
+          select: {
+            products: true,
+          },
+        },
+      },
+    }),
+    prisma.brand.findMany({
+      orderBy: {
+        title: "asc",
       },
       include: {
         _count: {
@@ -332,38 +423,25 @@ export const getAdminDashboardData = async (): Promise<AdminDashboardData> => {
           orderBy: {
             sortOrder: "asc",
           },
-          take: 1,
         },
         categories: {
           include: {
             category: {
               select: {
+                id: true,
                 title: true,
               },
             },
           },
         },
       },
-      take: 20,
+      take: 36,
     }),
     prisma.promoCode.findMany({
       orderBy: {
         updatedAt: "desc",
       },
-      take: 20,
-    }),
-    prisma.brand.findMany({
-      orderBy: {
-        updatedAt: "desc",
-      },
-      include: {
-        _count: {
-          select: {
-            products: true,
-          },
-        },
-      },
-      take: 20,
+      take: 24,
     }),
     prisma.order.findMany({
       orderBy: {
@@ -371,12 +449,19 @@ export const getAdminDashboardData = async (): Promise<AdminDashboardData> => {
       },
       include: {
         items: {
+          orderBy: {
+            createdAt: "asc",
+          },
           select: {
             id: true,
+            productNameSnapshot: true,
+            productImageUrlSnapshot: true,
+            productPriceSnapshot: true,
+            quantity: true,
           },
         },
       },
-      take: 12,
+      take: 40,
     }),
     prisma.product.findMany({
       where: {
@@ -392,19 +477,15 @@ export const getAdminDashboardData = async (): Promise<AdminDashboardData> => {
           updatedAt: "desc",
         },
       ],
-      select: {
-        id: true,
-        name: true,
-        stock: true,
-        slug: true,
+      include: {
+        images: {
+          orderBy: {
+            sortOrder: "asc",
+          },
+          take: 1,
+        },
       },
       take: 8,
-    }),
-    prisma.order.groupBy({
-      by: ["status"],
-      _count: {
-        status: true,
-      },
     }),
     prisma.order.groupBy({
       by: ["paymentStatus"],
@@ -433,9 +514,30 @@ export const getAdminDashboardData = async (): Promise<AdminDashboardData> => {
           },
         },
       },
-      take: 10,
+      take: 12,
     }),
   ]);
+
+  const orderStatusCounts = orders.reduce<Partial<Record<OrderStatus, number>>>(
+    (accumulator, order) => {
+      accumulator[order.status] = (accumulator[order.status] || 0) + 1;
+      return accumulator;
+    },
+    {}
+  );
+  const orderStageBreakdown = buildOrderStageBreakdown(orderStatusCounts);
+  const pendingOrders = orderStageBreakdown
+    .filter((item) =>
+      ["pending", "confirmed", "preparing", "shipped"].includes(item.status)
+    )
+    .reduce((sum, item) => sum + item.count, 0);
+  const expiringPromoCodes = promoCodes.filter((promo) => {
+    if (!promo.active || !promo.endsAt) {
+      return false;
+    }
+
+    return promo.endsAt.getTime() <= Date.now() + 7 * 24 * 60 * 60 * 1000;
+  }).length;
 
   return {
     metrics: {
@@ -444,28 +546,45 @@ export const getAdminDashboardData = async (): Promise<AdminDashboardData> => {
       pendingOrders,
       totalProducts,
       totalCategories,
+      totalBrands,
       activePromoCodes,
-      lowStockProducts: lowStockProductsCount,
+      expiringPromoCodes,
+      lowStockProducts: lowStockItems.length,
       totalCustomers,
     },
     categories: categories.map((category) => ({
       id: category.id,
       title: category.title,
-      slug: category.slug,
+      description: category.description,
       featured: category.featured,
       productCount: category._count.products,
+      imageUrl: category.imageUrl,
       updatedAt: category.updatedAt,
+    })),
+    brands: brands.map((brand) => ({
+      id: brand.id,
+      title: brand.title,
+      description: brand.description,
+      productCount: brand._count.products,
+      imageUrl: brand.imageUrl,
+      updatedAt: brand.updatedAt,
     })),
     products: products.map((product) => ({
       id: product.id,
       name: product.name,
-      slug: product.slug,
+      description: product.description,
       price: decimalToNumber(product.price),
+      discount: product.discount,
       stock: product.stock,
       status: product.status,
+      isFeatured: product.isFeatured,
+      brandId: product.brandId,
       brandTitle: product.brand?.title || null,
+      categoryIds: product.categories.map((item) => item.category.id),
       categoryTitles: product.categories.map((item) => item.category.title),
       imageUrl: product.images[0]?.url || null,
+      imageUrls: product.images.map((image) => image.url),
+      imagesCount: product.images.length,
       updatedAt: product.updatedAt,
     })),
     promoCodes: promoCodes.map((promo) => ({
@@ -475,39 +594,35 @@ export const getAdminDashboardData = async (): Promise<AdminDashboardData> => {
       active: promo.active,
       discountType: promo.discountType,
       discountValue: decimalToNumber(promo.discountValue),
-      minimumOrderAmount: decimalToNumber(promo.minimumOrderAmount),
-      usageLimit: promo.usageLimit,
-      usedCount: promo.usedCount,
-      allowedPaymentMethods: promo.allowedPaymentMethods,
       endsAt: promo.endsAt,
       updatedAt: promo.updatedAt,
     })),
-    brands: brands.map((brand) => ({
-      id: brand.id,
-      title: brand.title,
-      slug: brand.slug,
-      imageUrl: brand.imageUrl,
-      productCount: brand._count.products,
-      updatedAt: brand.updatedAt,
-    })),
-    recentOrders: recentOrders.map((order) => ({
+    orders: orders.map((order) => ({
       id: order.id,
       orderNumber: order.orderNumber,
       customerName: order.customerName,
       email: order.email,
+      phone: order.shippingPhone,
+      address: order.shippingAddress,
+      city: order.shippingCity,
+      state: order.shippingState,
+      zip: order.shippingZip,
       totalPrice: decimalToNumber(order.totalPrice),
       status: order.status,
+      adminStage: getAdminOrderStage(order.status),
       paymentStatus: order.paymentStatus,
       paymentMethod: order.paymentMethod,
       orderDate: order.orderDate,
       itemsCount: order.items.length,
-      shippingCity: order.shippingCity,
+      items: order.items.map((item) => ({
+        id: item.id,
+        name: item.productNameSnapshot,
+        imageUrl: item.productImageUrlSnapshot,
+        quantity: item.quantity,
+        unitPrice: decimalToNumber(item.productPriceSnapshot),
+      })),
     })),
-    lowStockItems,
-    orderStatusBreakdown: orderStatusBreakdown.map((item) => ({
-      status: item.status,
-      count: item._count.status,
-    })),
+    orderStageBreakdown,
     paymentStatusBreakdown: paymentStatusBreakdown.map((item) => ({
       status: item.paymentStatus,
       count: item._count.paymentStatus,
@@ -532,5 +647,11 @@ export const getAdminDashboardData = async (): Promise<AdminDashboardData> => {
         createdAt: customer.createdAt,
       };
     }),
+    lowStockItems: lowStockItems.map((item) => ({
+      id: item.id,
+      name: item.name,
+      stock: item.stock,
+      imageUrl: item.images[0]?.url || null,
+    })),
   };
 };

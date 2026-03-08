@@ -14,8 +14,10 @@ interface Props {
 }
 
 const AddToCartButton = ({ product, className }: Props) => {
-  const { addItem, getItemCount } = useStore();
-  const itemCount = getItemCount(product._id);
+  const addItem = useStore((state) => state.addItem);
+  const getItemCount = useStore((state) => state.getItemCount);
+  const hasHydrated = useStore((state) => state.hasHydrated);
+  const itemCount = hasHydrated ? getItemCount(product._id) : 0;
   const isOutOfStock = product.stock === 0;
 
   const handleAddToCart = () => {
@@ -46,7 +48,7 @@ const AddToCartButton = ({ product, className }: Props) => {
       ) : (
         <Button
           onClick={handleAddToCart}
-          disabled={isOutOfStock}
+          disabled={!hasHydrated || isOutOfStock}
           className={cn(
             "w-full h-auto min-h-10 px-2 sm:px-3 bg-shop_dark_green/80 text-lightBg shadow-none border border-shop_dark_green/80 font-semibold text-[11px] sm:text-sm tracking-normal text-white hover:bg-shop_dark_green hover:border-shop_dark_green hoverEffect",
             className
@@ -54,7 +56,11 @@ const AddToCartButton = ({ product, className }: Props) => {
         >
           <ShoppingBag className="hidden sm:inline-flex h-4 w-4 shrink-0" />
           <span className="text-center whitespace-normal sm:whitespace-nowrap">
-            {isOutOfStock ? "Rupture de stock" : "Ajouter au panier"}
+            {!hasHydrated
+              ? "Chargement..."
+              : isOutOfStock
+                ? "Rupture de stock"
+                : "Ajouter au panier"}
           </span>
         </Button>
       )}

@@ -12,8 +12,11 @@ interface CartIconProps {
 }
 
 const CartIcon = ({ className, iconClassName }: CartIconProps) => {
+  const hasHydrated = useStore((state) => state.hasHydrated);
   const items = useStore((state) => state.items);
-  const cartCount = items.reduce((total, item) => total + item.quantity, 0);
+  const cartCount = hasHydrated
+    ? items.reduce((total, item) => total + item.quantity, 0)
+    : 0;
 
   return (
     <Link

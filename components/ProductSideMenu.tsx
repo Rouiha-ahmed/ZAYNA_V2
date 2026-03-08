@@ -12,8 +12,11 @@ const ProductSideMenu = ({
   product: Product;
   className?: string;
 }) => {
-  const { favoriteProduct, addToFavorite } = useStore();
-  const existingProduct = favoriteProduct.find(
+  const favoriteProduct = useStore((state) => state.favoriteProduct);
+  const addToFavorite = useStore((state) => state.addToFavorite);
+  const hasHydrated = useStore((state) => state.hasHydrated);
+  const safeFavorites = hasHydrated ? favoriteProduct : [];
+  const existingProduct = safeFavorites.find(
     (item) => item?._id === product?._id
   );
   const handleFavorite = (e: React.MouseEvent<HTMLSpanElement>) => {
@@ -33,7 +36,7 @@ const ProductSideMenu = ({
       className={cn("absolute top-2 right-2 hover:cursor-pointer", className)}
     >
       <div
-        onClick={handleFavorite}
+        onClick={hasHydrated ? handleFavorite : undefined}
         className={`p-2.5 rounded-full hover:bg-shop_dark_green/80 hover:text-white hoverEffect  ${existingProduct ? "bg-shop_dark_green/80 text-white" : "bg-lightColor/10"}`}
       >
         <Heart size={15} />
