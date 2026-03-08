@@ -241,33 +241,10 @@ export default async function AdminPage({
   const recentOrdersPreview = data.orders.slice(0, 5);
 
   return (
-    <div className="space-y-10">
-      <div className="lg:hidden">
-        <div className="-mx-1 overflow-x-auto pb-1">
-          <div className="flex min-w-max gap-2 px-1">
-            {[
-              ["#dashboard", "Dashboard"],
-              ["#orders", "Commandes"],
-              ["#products", "Produits"],
-              ["#categories", "Categories"],
-              ["#brands", "Marques"],
-              ["#promos", "Promos"],
-            ].map(([href, label]) => (
-              <Link
-                key={href}
-                href={href}
-                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700"
-              >
-                {label}
-              </Link>
-            ))}
-          </div>
-        </div>
-      </div>
-
+    <div className="space-y-8 lg:space-y-10">
       <section
         id="dashboard"
-        className="overflow-hidden rounded-[34px] border border-shop_light_green/15 text-white shadow-[0_34px_110px_-58px_rgba(16,38,84,1)]"
+        className="scroll-mt-28 overflow-hidden rounded-[34px] border border-shop_light_green/15 text-white shadow-[0_34px_110px_-58px_rgba(16,38,84,1)] lg:scroll-mt-32"
         style={{
           backgroundImage:
             "linear-gradient(135deg, rgba(16, 38, 84, 1), rgba(24, 54, 114, 0.96) 45%, rgba(77, 182, 198, 0.9) 150%)",
@@ -508,7 +485,7 @@ export default async function AdminPage({
         </div>
       </section>
 
-      <section id="orders" className="space-y-6">
+      <section id="orders" className="scroll-mt-28 space-y-6 lg:scroll-mt-32">
         <SectionHeading
           badge="Commandes"
           title="Suivi des commandes"
@@ -549,7 +526,7 @@ export default async function AdminPage({
         </div>
       </section>
 
-      <section id="products" className="space-y-6">
+      <section id="products" className="scroll-mt-28 space-y-6 lg:scroll-mt-32">
         <SectionHeading
           badge="Produits"
           title="Catalogue produits"
@@ -886,7 +863,7 @@ export default async function AdminPage({
         </div>
       </section>
 
-      <section id="categories" className="space-y-6">
+      <section id="categories" className="scroll-mt-28 space-y-6 lg:scroll-mt-32">
         <SectionHeading
           badge="Categories"
           title="Organisation du catalogue"
@@ -1057,7 +1034,7 @@ export default async function AdminPage({
         </div>
       </section>
 
-      <section id="brands" className="space-y-6">
+      <section id="brands" className="scroll-mt-28 space-y-6 lg:scroll-mt-32">
         <SectionHeading
           badge="Marques"
           title="Gestion des marques"
@@ -1202,7 +1179,7 @@ export default async function AdminPage({
         </div>
       </section>
 
-      <section id="promos" className="space-y-6">
+      <section id="promos" className="scroll-mt-28 space-y-6 lg:scroll-mt-32">
         <SectionHeading
           badge="Promotions"
           title="Codes promo"

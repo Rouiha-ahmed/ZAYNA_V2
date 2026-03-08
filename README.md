@@ -2,6 +2,8 @@
 
 Zayna is a Next.js ecommerce/parapharmacy storefront using Clerk for authentication, Prisma for data access, PostgreSQL for persistence, and Stripe for card checkout.
 
+Full project documentation is available in [docs/APPLICATION_DOCUMENTATION.md](./docs/APPLICATION_DOCUMENTATION.md).
+
 ## Stack
 
 - Next.js App Router

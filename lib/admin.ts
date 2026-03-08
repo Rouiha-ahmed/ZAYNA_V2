@@ -347,6 +347,46 @@ export type AdminDashboardData = {
   }>;
 };
 
+export type AdminShellMetrics = {
+  pendingOrders: number;
+  lowStockProducts: number;
+  expiringPromoCodes: number;
+};
+
+export const getAdminShellMetrics = async (): Promise<AdminShellMetrics> => {
+  const [pendingOrders, lowStockProducts, expiringPromoCodes] = await Promise.all([
+    prisma.order.count({
+      where: {
+        status: {
+          in: ["pending", "processing", "paid", "shipped", "out_for_delivery"],
+        },
+      },
+    }),
+    prisma.product.count({
+      where: {
+        stock: {
+          lte: 5,
+        },
+      },
+    }),
+    prisma.promoCode.count({
+      where: {
+        active: true,
+        endsAt: {
+          gte: new Date(),
+          lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+      },
+    }),
+  ]);
+
+  return {
+    pendingOrders,
+    lowStockProducts,
+    expiringPromoCodes,
+  };
+};
+
 export const getAdminDashboardData = async (): Promise<AdminDashboardData> => {
   await requireAdmin();
 
