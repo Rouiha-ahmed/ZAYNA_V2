@@ -12,6 +12,18 @@ import { prisma } from "@/lib/prisma";
 
 const adminDataTag = getAdminDataTag();
 const sevenDaysFromNow = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+const fourteenDaysAgo = () => {
+  const date = new Date();
+
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() - 13);
+
+  return date;
+};
+const timelineLabelFormatter = new Intl.DateTimeFormat("fr-MA", {
+  weekday: "short",
+  day: "2-digit",
+});
 
 const decimalToNumber = (value: Prisma.Decimal | number | null | undefined) => {
   if (value === null || value === undefined) {
@@ -22,6 +34,51 @@ const decimalToNumber = (value: Prisma.Decimal | number | null | undefined) => {
 };
 
 const toDate = (value: Date | string | null) => (value ? new Date(value) : null);
+
+const getUtcDateKey = (value: Date) =>
+  `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    value.getUTCDate()
+  ).padStart(2, "0")}`;
+
+const buildRevenueSeries = (
+  orders: Array<{
+    orderDate: Date;
+    paymentStatus: PaymentStatus;
+    totalPrice: Prisma.Decimal | number;
+  }>
+) => {
+  const start = fourteenDaysAgo();
+  const series = Array.from({ length: 14 }, (_, index) => {
+    const date = new Date(start);
+
+    date.setUTCDate(start.getUTCDate() + index);
+
+    return {
+      date: getUtcDateKey(date),
+      label: timelineLabelFormatter.format(date),
+      revenue: 0,
+      orders: 0,
+    };
+  });
+  const seriesByDate = new Map(series.map((entry) => [entry.date, entry]));
+
+  orders.forEach((order) => {
+    const key = getUtcDateKey(order.orderDate);
+    const bucket = seriesByDate.get(key);
+
+    if (!bucket) {
+      return;
+    }
+
+    bucket.orders += 1;
+
+    if (order.paymentStatus === "paid") {
+      bucket.revenue += decimalToNumber(order.totalPrice);
+    }
+  });
+
+  return series;
+};
 
 const buildOrderStageBreakdown = (counts: Partial<Record<OrderStatus, number>>) =>
   adminOrderStageOptions.map((option) => {
@@ -330,6 +387,17 @@ export type AdminOverviewData = {
   recentOrders: AdminDashboardData["orders"];
   recentCustomers: AdminDashboardData["customers"];
   lowStockItems: AdminDashboardData["lowStockItems"];
+  revenueSeries: Array<{
+    date: string;
+    label: string;
+    revenue: number;
+    orders: number;
+  }>;
+  topProducts: Array<{
+    name: string;
+    unitsSold: number;
+    ordersCount: number;
+  }>;
 };
 
 async function fetchAdminOverviewData(): Promise<AdminOverviewData> {
@@ -346,6 +414,8 @@ async function fetchAdminOverviewData(): Promise<AdminOverviewData> {
     lowStockItems,
     recentCustomers,
     expiringPromoCodes,
+    recentRevenueOrders,
+    topProducts,
   ] = await Promise.all([
     prisma.order.count(),
     prisma.product.count(),
@@ -447,6 +517,36 @@ async function fetchAdminOverviewData(): Promise<AdminOverviewData> {
         },
       },
     }),
+    prisma.order.findMany({
+      where: {
+        orderDate: {
+          gte: fourteenDaysAgo(),
+        },
+      },
+      orderBy: {
+        orderDate: "asc",
+      },
+      select: {
+        orderDate: true,
+        paymentStatus: true,
+        totalPrice: true,
+      },
+    }),
+    prisma.orderItem.groupBy({
+      by: ["productNameSnapshot"],
+      _sum: {
+        quantity: true,
+      },
+      _count: {
+        _all: true,
+      },
+      orderBy: {
+        _sum: {
+          quantity: "desc",
+        },
+      },
+      take: 5,
+    }),
   ]);
 
   const orderStageBreakdown = buildOrderStageBreakdown(
@@ -470,6 +570,12 @@ async function fetchAdminOverviewData(): Promise<AdminOverviewData> {
     recentOrders: mapOrders(recentOrders),
     recentCustomers: mapCustomers(recentCustomers),
     lowStockItems: mapLowStockItems(lowStockItems),
+    revenueSeries: buildRevenueSeries(recentRevenueOrders),
+    topProducts: topProducts.map((item) => ({
+      name: item.productNameSnapshot,
+      unitsSold: item._sum.quantity || 0,
+      ordersCount: item._count._all,
+    })),
   };
 }
 

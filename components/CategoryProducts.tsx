@@ -1,14 +1,15 @@
 "use client";
-import { Category, Product } from "@/types";
-import { useRouter } from "next/navigation";
-import React, { useEffect, useRef, useState, useTransition } from "react";
-import { Button } from "./ui/button";
-import { AnimatePresence, motion } from "motion/react";
+
+import React, { useEffect, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+
+import { getCategoryIcon } from "@/lib/category-icons";
+import { Category, Product } from "@/types";
 import NoProductAvailable from "./NoProductAvailable";
 import ProductCard from "./ProductCard";
-import { getCategoryIcon } from "@/lib/category-icons";
-import { fetchWithRetry } from "@/lib/fetchWithRetry";
+import { Button } from "./ui/button";
+
 interface Props {
   categories: Category[];
   slug: string;
@@ -20,16 +21,15 @@ const CategoryProducts = ({
   slug,
   initialProducts = [],
 }: Props) => {
-  const cacheRef = useRef(
-    new Map<string, Product[]>(slug ? [[slug, initialProducts]] : [])
-  );
   const [currentSlug, setCurrentSlug] = useState(slug);
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [loading, setLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+
   const handleCategoryChange = (newSlug: string) => {
-    if (newSlug === currentSlug) return; // Prevent unnecessary updates
+    if (!newSlug || newSlug === currentSlug || isPending) {
+      return;
+    }
+
     startTransition(() => {
       setCurrentSlug(newSlug);
       router.push(`/category/${newSlug}`, { scroll: false });
@@ -39,6 +39,7 @@ const CategoryProducts = ({
   useEffect(() => {
     categories.forEach((category) => {
       const nextSlug = category.slug?.current;
+
       if (nextSlug) {
         router.prefetch(`/category/${nextSlug}`);
       }
@@ -46,104 +47,36 @@ const CategoryProducts = ({
   }, [categories, router]);
 
   useEffect(() => {
-    cacheRef.current.set(slug, initialProducts);
     setCurrentSlug(slug);
-    setProducts(initialProducts);
-    setLoading(false);
-  }, [initialProducts, slug]);
+  }, [slug]);
 
-  useEffect(() => {
-    if (!currentSlug) {
-      setProducts([]);
-      setLoading(false);
-      return;
-    }
-
-    const cachedProducts = cacheRef.current.get(currentSlug);
-    if (cachedProducts) {
-      setProducts(cachedProducts);
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    const run = async () => {
-      setLoading(true);
-      try {
-        const data = await fetchWithRetry(
-          async () => {
-            const response = await fetch(
-              `/api/products/search?category=${encodeURIComponent(currentSlug)}`,
-              {
-                cache: "no-store",
-              }
-            );
-
-            if (!response.ok) {
-              throw new Error(`Failed to fetch products: ${response.status}`);
-            }
-
-            return (await response.json()) as Product[];
-          },
-          { retries: 1, retryDelayMs: 400 }
-        );
-
-        if (!cancelled) {
-          cacheRef.current.set(currentSlug, data || []);
-          setProducts(data || []);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.error("Error fetching products:", error);
-          setProducts([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    run();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [currentSlug]);
-
-  const showInitialLoader = loading && !products.length;
-  const showInlineLoading = (loading || isPending) && products.length > 0;
+  const showInlineLoading = isPending || currentSlug !== slug;
 
   return (
-    <div className="py-5 flex flex-col md:flex-row items-start gap-5">
-      <div className="flex flex-col md:min-w-40 border">
+    <div className="flex flex-col items-start gap-5 py-5 md:flex-row">
+      <div className="flex flex-col border md:min-w-40">
         {categories.map((item) => {
           const Icon = getCategoryIcon(item.title || "");
+          const categorySlug = item.slug?.current || "";
 
           return (
             <Button
-              onClick={() => handleCategoryChange(item.slug?.current as string)}
               key={item._id}
-              className={`bg-transparent border-0 p-0 rounded-none text-darkColor shadow-none hover:bg-shop_orange hover:text-white font-semibold hoverEffect border-b last:border-b-0 transition-colors capitalize ${item.slug?.current === currentSlug && "bg-shop_orange text-white border-shop_orange"}`}
+              type="button"
+              onClick={() => handleCategoryChange(categorySlug)}
+              className={`rounded-none border-0 border-b p-0 text-darkColor shadow-none transition-colors last:border-b-0 hover:bg-shop_orange hover:text-white hoverEffect capitalize ${categorySlug === currentSlug ? "border-shop_orange bg-shop_orange text-white" : "bg-transparent"} `}
             >
-              <p className="w-full text-left px-2 inline-flex items-center gap-2">
+              <span className="inline-flex w-full items-center gap-2 px-2 text-left font-semibold">
                 <Icon className="h-4 w-4" />
                 {item.title}
-              </p>
+              </span>
             </Button>
           );
         })}
       </div>
+
       <div className="flex-1">
-        {showInitialLoader ? (
-          <div className="flex flex-col items-center justify-center py-10 min-h-80 space-y-4 text-center bg-gray-100 rounded-lg w-full">
-            <div className="flex items-center space-x-2 text-blue-600">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Chargement des produits...</span>
-            </div>
-          </div>
-        ) : products.length > 0 ? (
+        {initialProducts.length > 0 ? (
           <>
             {showInlineLoading ? (
               <div className="mb-3 flex justify-end">
@@ -153,21 +86,21 @@ const CategoryProducts = ({
                 </div>
               </div>
             ) : null}
-            <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 transition-opacity ${showInlineLoading ? "opacity-70" : "opacity-100"}`}>
-              {products.map((product: Product) => (
-                <AnimatePresence key={product._id}>
-                  <motion.div>
-                    <ProductCard product={product} />
-                  </motion.div>
-                </AnimatePresence>
+
+            <div
+              className={`grid grid-cols-2 gap-2.5 transition-opacity md:grid-cols-3 lg:grid-cols-5 ${
+                showInlineLoading ? "opacity-70" : "opacity-100"
+              }`}
+            >
+              {initialProducts.map((product) => (
+                <div key={product._id}>
+                  <ProductCard product={product} />
+                </div>
               ))}
             </div>
           </>
         ) : (
-          <NoProductAvailable
-            selectedTab={currentSlug}
-            className="mt-0 w-full"
-          />
+          <NoProductAvailable selectedTab={currentSlug} className="mt-0 w-full" />
         )}
       </div>
     </div>
@@ -175,4 +108,3 @@ const CategoryProducts = ({
 };
 
 export default CategoryProducts;
-

@@ -134,9 +134,7 @@ const SearchBarContent = ({
               q: searchValue,
               limit: "6",
             });
-            const response = await fetch(`/api/products/search?${params.toString()}`, {
-              cache: "no-store",
-            });
+            const response = await fetch(`/api/products/search?${params.toString()}`);
 
             if (!response.ok) {
               throw new Error(`Failed to fetch suggestions: ${response.status}`);

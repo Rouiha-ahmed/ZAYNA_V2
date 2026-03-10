@@ -26,7 +26,11 @@ export async function GET(req: NextRequest) {
       limit: Number.isFinite(limit) && limit > 0 ? limit : undefined,
     });
 
-    return NextResponse.json(products);
+    return NextResponse.json(products, {
+      headers: {
+        "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300",
+      },
+    });
   } catch (error) {
     console.error("Failed to search products:", error);
     return NextResponse.json(

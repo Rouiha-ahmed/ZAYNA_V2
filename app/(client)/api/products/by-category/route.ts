@@ -13,7 +13,11 @@ export async function GET(req: NextRequest) {
 
     const products = await getProductsByCategoryId(categoryId);
 
-    return NextResponse.json(products);
+    return NextResponse.json(products, {
+      headers: {
+        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+      },
+    });
   } catch (error) {
     console.error("Failed to fetch products by category:", error);
     return NextResponse.json(

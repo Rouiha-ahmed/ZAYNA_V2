@@ -2,7 +2,6 @@
 
 import React, { useEffect, useRef, useState, useTransition } from "react";
 import ProductCard from "./ProductCard";
-import { motion, AnimatePresence } from "motion/react";
 import NoProductAvailable from "./NoProductAvailable";
 import { Loader2 } from "lucide-react";
 import Container from "./Container";
@@ -91,10 +90,7 @@ const ProductGrid = ({
         const response = await fetchWithRetry(
           async () => {
             const res = await fetch(
-              `/api/products/by-category?categoryId=${encodeURIComponent(selectedCategoryId)}`,
-              {
-                cache: "no-store",
-              }
+              `/api/products/by-category?categoryId=${encodeURIComponent(selectedCategoryId)}`
             );
 
             if (!res.ok) {
@@ -128,6 +124,73 @@ const ProductGrid = ({
     };
   }, [selectedCategoryId]);
 
+  useEffect(() => {
+    const uncachedCategoryIds = tabCategories
+      .map((category) => category._id)
+      .filter(
+        (categoryId) =>
+          categoryId &&
+          categoryId !== selectedCategoryId &&
+          !cacheRef.current.has(categoryId)
+      )
+      .slice(0, 3);
+
+    if (!uncachedCategoryIds.length) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const warmCategoryCache = async () => {
+      for (const categoryId of uncachedCategoryIds) {
+        if (cancelled || cacheRef.current.has(categoryId)) {
+          continue;
+        }
+
+        try {
+          const response = await fetch(
+            `/api/products/by-category?categoryId=${encodeURIComponent(categoryId)}`
+          );
+
+          if (!response.ok) {
+            continue;
+          }
+
+          const data = (await response.json()) as Product[];
+
+          if (!cancelled) {
+            cacheRef.current.set(categoryId, data || []);
+          }
+        } catch (error) {
+          console.log("Product prefetch Error", error);
+        }
+      }
+    };
+
+    const warmOnIdle = () => {
+      void warmCategoryCache();
+    };
+
+    if (
+      typeof window !== "undefined" &&
+      typeof window.requestIdleCallback === "function"
+    ) {
+      const idleId = window.requestIdleCallback(warmOnIdle);
+
+      return () => {
+        cancelled = true;
+        window.cancelIdleCallback(idleId);
+      };
+    }
+
+    const timer = globalThis.setTimeout(warmOnIdle, 600);
+
+    return () => {
+      cancelled = true;
+      globalThis.clearTimeout(timer);
+    };
+  }, [selectedCategoryId, tabCategories]);
+
   const selectedCategoryTitle =
     tabCategories.find((category) => category._id === selectedCategoryId)
       ?.title || "Cette categorie";
@@ -151,10 +214,10 @@ const ProductGrid = ({
       />
       {showInitialLoader ? (
         <div className="flex flex-col items-center justify-center py-10 min-h-80 space-y-4 text-center bg-gray-100 rounded-lg w-full mt-10">
-          <motion.div className="flex items-center space-x-2 text-blue-600">
+          <div className="flex items-center space-x-2 text-blue-600">
             <Loader2 className="w-5 h-5 animate-spin" />
             <span>Chargement des produits...</span>
-          </motion.div>
+          </div>
         </div>
       ) : products?.length ? (
         <>
@@ -167,20 +230,11 @@ const ProductGrid = ({
             </div>
           ) : null}
           <div className={`grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 mt-10 transition-opacity ${showInlineLoading ? "opacity-70" : "opacity-100"}`}>
-            <>
-              {products?.map((product) => (
-                <AnimatePresence key={product?._id}>
-                  <motion.div
-                    layout
-                    initial={{ opacity: 0.2 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                  >
-                    <ProductCard key={product?._id} product={product} />
-                  </motion.div>
-                </AnimatePresence>
-              ))}
-            </>
+            {products?.map((product) => (
+              <div key={product?._id}>
+                <ProductCard product={product} />
+              </div>
+            ))}
           </div>
         </>
       ) : (

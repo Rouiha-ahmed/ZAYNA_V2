@@ -177,7 +177,7 @@ export default async function AdminOrdersPage({
         <SectionHeading
           badge="Liste complete"
           title="Ouvrir et traiter une commande"
-          description="Cliquez sur une ligne pour afficher la fiche detaillee, les produits commandes et le formulaire de mise a jour."
+          description="La file prioritaire met d'abord en avant les commandes a valider par le bureau, puis la liste complete permet d'ouvrir la fiche detaillee, verifier les articles et changer le statut."
         />
 
         <div className={cn(adminSurfaceClassName, "p-5 md:p-6")}>

@@ -144,9 +144,7 @@ const Shop = ({
 
       const data = await fetchWithRetry(
         async () => {
-          const res = await fetch(`/api/products/search?${params.toString()}`, {
-            cache: "no-store",
-          });
+          const res = await fetch(`/api/products/search?${params.toString()}`);
 
           if (!res.ok) {
             throw new Error(`Failed to fetch products: ${res.status}`);

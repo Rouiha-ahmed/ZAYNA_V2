@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { unstable_cache } from "next/cache";
 
 import { mapBrand, mapCategory, mapOrder, mapProduct } from "@/lib/data/mappers";
 import { prisma } from "@/lib/prisma";
@@ -28,114 +29,268 @@ type SearchProductsInput = {
   limit?: number;
 };
 
+const STOREFRONT_REVALIDATE = 300;
+const PRODUCT_SEARCH_REVALIDATE = 120;
+
+const normalizeSearchProductsInput = ({
+  selectedCategory,
+  selectedCategoryId,
+  selectedBrand,
+  searchTerm,
+  minPrice,
+  maxPrice,
+  limit,
+}: SearchProductsInput) => ({
+  selectedCategory: selectedCategory?.trim() || "",
+  selectedCategoryId: selectedCategoryId?.trim() || "",
+  selectedBrand: selectedBrand?.trim() || "",
+  searchTerm: searchTerm?.trim() || "",
+  minPrice:
+    typeof minPrice === "number" && Number.isFinite(minPrice) ? minPrice : null,
+  maxPrice:
+    typeof maxPrice === "number" && Number.isFinite(maxPrice) ? maxPrice : null,
+  limit: typeof limit === "number" && Number.isFinite(limit) && limit > 0 ? limit : null,
+});
+
+const getCachedCategories = unstable_cache(
+  async (quantity?: number): Promise<Category[]> => {
+    const categories = await prisma.category.findMany({
+      orderBy: {
+        title: "asc",
+      },
+      take: quantity,
+      include: {
+        _count: {
+          select: {
+            products: true,
+          },
+        },
+      },
+    });
+
+    return categories.map(mapCategory);
+  },
+  ["storefront-categories"],
+  { revalidate: STOREFRONT_REVALIDATE }
+);
+
+const getCachedAllCategorySlugs = unstable_cache(
+  async () => {
+    const categories = await prisma.category.findMany({
+      orderBy: {
+        slug: "asc",
+      },
+      select: {
+        slug: true,
+      },
+    });
+
+    return categories.map((category) => category.slug);
+  },
+  ["storefront-category-slugs"],
+  { revalidate: STOREFRONT_REVALIDATE }
+);
+
+const getCachedFooterCategories = unstable_cache(
+  async (quantity?: number) => {
+    const categories = await prisma.category.findMany({
+      orderBy: {
+        title: "asc",
+      },
+      take: quantity,
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+      },
+    });
+
+    return categories.map((category) => ({
+      _id: category.id,
+      title: category.title,
+      slug: {
+        current: category.slug,
+      },
+    }));
+  },
+  ["storefront-footer-categories"],
+  { revalidate: STOREFRONT_REVALIDATE }
+);
+
+const getCachedAllBrands = unstable_cache(
+  async (): Promise<BRANDS_QUERYResult> => {
+    const brands = await prisma.brand.findMany({
+      orderBy: {
+        title: "asc",
+      },
+    });
+
+    return brands.map(mapBrand);
+  },
+  ["storefront-brands"],
+  { revalidate: STOREFRONT_REVALIDATE }
+);
+
+const getCachedDealProducts = unstable_cache(
+  async (): Promise<Product[]> => {
+    const products = await prisma.product.findMany({
+      where: {
+        status: "hot",
+      },
+      orderBy: {
+        name: "asc",
+      },
+      include: productInclude,
+    });
+
+    return products.map(mapProduct);
+  },
+  ["storefront-deals"],
+  { revalidate: STOREFRONT_REVALIDATE }
+);
+
+const getCachedProductBySlug = unstable_cache(
+  async (slug: string): Promise<Product | null> => {
+    const product = await prisma.product.findUnique({
+      where: {
+        slug,
+      },
+      include: productInclude,
+    });
+
+    return product ? mapProduct(product) : null;
+  },
+  ["storefront-product-by-slug"],
+  { revalidate: STOREFRONT_REVALIDATE }
+);
+
+const getCachedAllProductSlugs = unstable_cache(
+  async () => {
+    const products = await prisma.product.findMany({
+      orderBy: {
+        slug: "asc",
+      },
+      select: {
+        slug: true,
+      },
+    });
+
+    return products.map((product) => product.slug);
+  },
+  ["storefront-product-slugs"],
+  { revalidate: STOREFRONT_REVALIDATE }
+);
+
+const getCachedSearchProducts = unstable_cache(
+  async (input: ReturnType<typeof normalizeSearchProductsInput>): Promise<Product[]> => {
+    const filters: Prisma.ProductWhereInput[] = [];
+    const tokens = input.searchTerm
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter(Boolean);
+
+    if (input.selectedCategoryId) {
+      filters.push({
+        categories: {
+          some: {
+            categoryId: input.selectedCategoryId,
+          },
+        },
+      });
+    }
+
+    if (input.selectedCategory) {
+      filters.push({
+        categories: {
+          some: {
+            category: {
+              slug: input.selectedCategory,
+            },
+          },
+        },
+      });
+    }
+
+    if (input.selectedBrand) {
+      filters.push({
+        brand: {
+          is: {
+            slug: input.selectedBrand,
+          },
+        },
+      });
+    }
+
+    if (input.minPrice !== null && input.maxPrice !== null) {
+      filters.push({
+        price: {
+          gte: new Prisma.Decimal(input.minPrice),
+          lte: new Prisma.Decimal(input.maxPrice),
+        },
+      });
+    }
+
+    for (const token of tokens) {
+      filters.push({
+        OR: [
+          {
+            name: {
+              contains: token,
+              mode: "insensitive",
+            },
+          },
+          {
+            description: {
+              contains: token,
+              mode: "insensitive",
+            },
+          },
+        ],
+      });
+    }
+
+    const products = await prisma.product.findMany({
+      where: filters.length ? { AND: filters } : undefined,
+      orderBy: {
+        name: "asc",
+      },
+      take: input.limit || undefined,
+      include: productInclude,
+    });
+
+    return products.map(mapProduct);
+  },
+  ["storefront-search-products"],
+  { revalidate: PRODUCT_SEARCH_REVALIDATE }
+);
+
 export const getCategories = async (
   quantity?: number,
   _revalidate?: number
 ): Promise<Category[]> => {
   void _revalidate;
-  const categories = await prisma.category.findMany({
-    orderBy: {
-      title: "asc",
-    },
-    take: quantity,
-    include: {
-      _count: {
-        select: {
-          products: true,
-        },
-      },
-    },
-  });
-
-  return categories.map(mapCategory);
+  return getCachedCategories(quantity);
 };
 
-export const getAllCategorySlugs = async () => {
-  const categories = await prisma.category.findMany({
-    orderBy: {
-      slug: "asc",
-    },
-    select: {
-      slug: true,
-    },
-  });
-
-  return categories.map((category) => category.slug);
-};
+export const getAllCategorySlugs = async () => getCachedAllCategorySlugs();
 
 export const getFooterCategories = async (
   quantity?: number,
   _revalidate = 60
 ) => {
   void _revalidate;
-  const categories = await prisma.category.findMany({
-    orderBy: {
-      title: "asc",
-    },
-    take: quantity,
-    select: {
-      id: true,
-      title: true,
-      slug: true,
-    },
-  });
-
-  return categories.map((category) => ({
-    _id: category.id,
-    title: category.title,
-    slug: {
-      current: category.slug,
-    },
-  }));
+  return getCachedFooterCategories(quantity);
 };
 
-export const getAllBrands = async (): Promise<BRANDS_QUERYResult> => {
-  const brands = await prisma.brand.findMany({
-    orderBy: {
-      title: "asc",
-    },
-  });
+export const getAllBrands = async (): Promise<BRANDS_QUERYResult> => getCachedAllBrands();
 
-  return brands.map(mapBrand);
-};
-
-export const getDealProducts = async (): Promise<Product[]> => {
-  const products = await prisma.product.findMany({
-    where: {
-      status: "hot",
-    },
-    orderBy: {
-      name: "asc",
-    },
-    include: productInclude,
-  });
-
-  return products.map(mapProduct);
-};
+export const getDealProducts = async (): Promise<Product[]> => getCachedDealProducts();
 
 export const getProductBySlug = async (slug: string): Promise<Product | null> => {
-  const product = await prisma.product.findUnique({
-    where: {
-      slug,
-    },
-    include: productInclude,
-  });
-
-  return product ? mapProduct(product) : null;
+  return getCachedProductBySlug(slug);
 };
 
-export const getAllProductSlugs = async () => {
-  const products = await prisma.product.findMany({
-    orderBy: {
-      slug: "asc",
-    },
-    select: {
-      slug: true,
-    },
-  });
-
-  return products.map((product) => product.slug);
-};
+export const getAllProductSlugs = async () => getCachedAllProductSlugs();
 
 export const searchProducts = async ({
   selectedCategory,
@@ -146,87 +301,17 @@ export const searchProducts = async ({
   maxPrice,
   limit,
 }: SearchProductsInput): Promise<Product[]> => {
-  const filters: Prisma.ProductWhereInput[] = [];
-  const tokens = (searchTerm || "")
-    .split(/\s+/)
-    .map((token) => token.trim())
-    .filter(Boolean);
-
-  if (selectedCategoryId) {
-    filters.push({
-      categories: {
-        some: {
-          categoryId: selectedCategoryId,
-        },
-      },
-    });
-  }
-
-  if (selectedCategory) {
-    filters.push({
-      categories: {
-        some: {
-          category: {
-            slug: selectedCategory,
-          },
-        },
-      },
-    });
-  }
-
-  if (selectedBrand) {
-    filters.push({
-      brand: {
-        is: {
-          slug: selectedBrand,
-        },
-      },
-    });
-  }
-
-  if (
-    typeof minPrice === "number" &&
-    Number.isFinite(minPrice) &&
-    typeof maxPrice === "number" &&
-    Number.isFinite(maxPrice)
-  ) {
-    filters.push({
-      price: {
-        gte: new Prisma.Decimal(minPrice),
-        lte: new Prisma.Decimal(maxPrice),
-      },
-    });
-  }
-
-  for (const token of tokens) {
-    filters.push({
-      OR: [
-        {
-          name: {
-            contains: token,
-            mode: "insensitive",
-          },
-        },
-        {
-          description: {
-            contains: token,
-            mode: "insensitive",
-          },
-        },
-      ],
-    });
-  }
-
-  const products = await prisma.product.findMany({
-    where: filters.length ? { AND: filters } : undefined,
-    orderBy: {
-      name: "asc",
-    },
-    take: limit,
-    include: productInclude,
-  });
-
-  return products.map(mapProduct);
+  return getCachedSearchProducts(
+    normalizeSearchProductsInput({
+      selectedCategory,
+      selectedCategoryId,
+      selectedBrand,
+      searchTerm,
+      minPrice,
+      maxPrice,
+      limit,
+    })
+  );
 };
 
 export const getProductsByCategoryId = async (categoryId: string) =>
