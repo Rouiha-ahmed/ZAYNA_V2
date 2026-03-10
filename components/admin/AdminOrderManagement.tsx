@@ -422,7 +422,7 @@ const AdminOrderManagement = ({
       </div>
 
       <Dialog open={Boolean(selectedOrder)} onOpenChange={(open) => !open && closeOrder()}>
-        <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto rounded-[34px] border-white/70 bg-white p-0 shadow-[0_36px_90px_-44px_rgba(15,23,42,0.45)]">
+        <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] sm:w-[80vw] sm:max-w-[80vw] overflow-y-auto rounded-[34px] border-white/70 bg-white p-0 shadow-[0_36px_90px_-44px_rgba(15,23,42,0.45)]">
           {selectedOrder ? (
             <div className="space-y-7 p-6 md:p-8">
               <DialogHeader className="space-y-4">
