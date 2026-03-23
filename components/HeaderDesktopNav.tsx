@@ -1,29 +1,26 @@
 "use client";
 
 import { useHydrated } from "@/hooks";
-import { cn } from "@/lib/utils";
 import { UserButton, useAuth } from "@clerk/nextjs";
 import { LayoutDashboard, Logs } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import CartIcon from "./CartIcon";
 import FavoriteButton from "./FavoriteButton";
-import HeaderMenu from "./HeaderMenu";
 import SearchBar from "./SearchBar";
 import SignIn from "./SignIn";
-
-const smoothTransition =
-  "transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]";
 
 type NavigationContext = {
   ordersCount: number;
   isAdmin: boolean;
 };
 
+const iconButtonClassName =
+  "group relative inline-flex h-10 w-10 items-center justify-center rounded-lg border border-shop_light_green/25 bg-white text-lightColor shadow-[0_10px_20px_-18px_rgba(22,46,110,0.5)] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-shop_light_green/65 hover:text-shop_dark_green";
+
 const HeaderDesktopNav = () => {
   const { isLoaded, userId } = useAuth();
   const mounted = useHydrated();
-  const [isSearchActive, setIsSearchActive] = useState(false);
   const [navigationContext, setNavigationContext] = useState<NavigationContext>({
     ordersCount: 0,
     isAdmin: false,
@@ -86,121 +83,76 @@ const HeaderDesktopNav = () => {
 
   return (
     <>
-      <div
-        className={cn(
-          "hidden min-w-0 lg:flex lg:items-center lg:justify-center",
-          smoothTransition,
-          isSearchActive ? "-translate-x-5 xl:-translate-x-8" : "translate-x-0"
-        )}
-      >
-        <HeaderMenu
-          isSearchActive={isSearchActive}
-          className={cn(smoothTransition, isSearchActive && "opacity-90")}
-        />
-      </div>
+      <div className="hidden items-center gap-2 lg:flex">
+        <CartIcon className={iconButtonClassName} iconClassName="h-4.5 w-4.5" />
+        <FavoriteButton className={iconButtonClassName} iconClassName="h-4.5 w-4.5" />
 
-      <div
-        className={cn(
-          "hidden lg:flex lg:items-center lg:justify-end",
-          smoothTransition,
-          isSearchActive ? "translate-x-1.5" : "translate-x-0"
-        )}
-      >
-        <div
-          className={cn(
-            "inline-flex items-center rounded-full border border-shop_light_green/30 bg-white/80 p-1.5 shadow-[0_14px_32px_-28px_rgba(22,46,110,1)] backdrop-blur-md",
-            smoothTransition,
-            isSearchActive &&
-              "border-shop_dark_green/35 shadow-[0_20px_38px_-28px_rgba(22,46,110,1)]"
-          )}
-        >
-          <SearchBar
-            mode="desktop"
-            onDesktopActiveChange={setIsSearchActive}
-            className="mr-1"
-          />
-
-          <div
-            className={cn(
-              "flex items-center gap-2.5 xl:gap-3.5",
-              smoothTransition,
-              isSearchActive ? "translate-x-1.5" : "translate-x-0"
-            )}
-          >
-            <CartIcon />
-            <FavoriteButton />
-
-            {isAdmin && (
-              <Link
-                href="/admin"
-                className="group inline-flex h-9 items-center gap-2 rounded-full border border-shop_light_green/30 bg-white/90 px-3 text-sm font-medium text-lightColor shadow-[0_10px_24px_-20px_rgba(22,46,110,0.9)] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-shop_light_green/70 hover:text-shop_dark_green"
-              >
-                <LayoutDashboard className="h-4 w-4" />
-                <span className="hidden xl:inline">Admin</span>
-              </Link>
-            )}
-
-            {isSignedIn && (
-              <Link
-                href={"/orders"}
-                className="group relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-shop_light_green/30 bg-white/90 text-lightColor shadow-[0_10px_24px_-20px_rgba(22,46,110,0.9)] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-shop_light_green/70 hover:text-shop_dark_green"
-              >
-                <Logs className="h-4.5 w-4.5" />
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-shop_btn_dark_green px-1 text-[10px] font-semibold text-white">
-                  {ordersCount}
-                </span>
-              </Link>
-            )}
-
-            {isAuthReady ? (
-              isSignedIn ? (
-                <div className="pl-0.5">
-                  <UserButton />
-                </div>
-              ) : (
-                <SignIn className="px-3.5" />
-              )
-            ) : (
-              <div className="h-9 w-28 rounded-full border border-shop_light_green/20 bg-white/70" />
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2.5 lg:hidden">
-        <SearchBar mode="mobile" />
-        <CartIcon className="h-8 w-8" iconClassName="h-4 w-4" />
-        <FavoriteButton className="h-8 w-8" iconClassName="h-4 w-4" />
-
-        {isAdmin && (
-          <Link
-            href="/admin"
-            className="group inline-flex h-8 w-8 items-center justify-center rounded-full border border-shop_light_green/35 bg-white/90 text-lightColor"
-          >
-            <LayoutDashboard className="h-4 w-4 transition-colors duration-300 group-hover:text-shop_dark_green" />
-          </Link>
-        )}
-
-        {isSignedIn && (
-          <Link
-            href={"/orders"}
-            className="group relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-shop_light_green/35 bg-white/90 text-lightColor"
-          >
-            <Logs className="h-4 w-4 transition-colors duration-300 group-hover:text-shop_dark_green" />
+        {isSignedIn ? (
+          <Link href="/orders" className={iconButtonClassName}>
+            <Logs className="h-4.5 w-4.5" />
             <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-shop_btn_dark_green px-1 text-[10px] font-semibold text-white">
               {ordersCount}
             </span>
           </Link>
+        ) : null}
+
+        {isAdmin ? (
+          <Link
+            href="/admin"
+            className="group inline-flex h-10 items-center gap-2 rounded-lg border border-shop_light_green/25 bg-white px-3 text-sm font-semibold text-shop_dark_green shadow-[0_10px_20px_-18px_rgba(22,46,110,0.5)] transition-all duration-300 hover:-translate-y-0.5 hover:border-shop_light_green/70"
+          >
+            <LayoutDashboard className="h-4 w-4" />
+            Admin
+          </Link>
+        ) : null}
+
+        {isAuthReady ? (
+          isSignedIn ? (
+            <div className="ml-1 rounded-lg border border-shop_light_green/20 bg-white p-1 shadow-[0_10px_20px_-18px_rgba(22,46,110,0.5)]">
+              <UserButton />
+            </div>
+          ) : (
+            <SignIn className="h-10 rounded-lg border border-shop_light_green/25 bg-white px-3 text-sm font-semibold text-shop_dark_green shadow-[0_10px_20px_-18px_rgba(22,46,110,0.5)]" />
+          )
+        ) : (
+          <div className="h-10 w-24 rounded-lg border border-shop_light_green/20 bg-white/75" />
         )}
+      </div>
+
+      <div className="flex items-center gap-2 lg:hidden">
+        <SearchBar mode="mobile" />
+        <CartIcon className="h-9 w-9 rounded-xl" iconClassName="h-4 w-4" />
+        <FavoriteButton className="h-9 w-9 rounded-xl" iconClassName="h-4 w-4" />
+
+        {isAdmin ? (
+          <Link
+            href="/admin"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-shop_light_green/35 bg-white/90 text-lightColor"
+          >
+            <LayoutDashboard className="h-4 w-4" />
+          </Link>
+        ) : null}
+
+        {isSignedIn ? (
+          <Link
+            href="/orders"
+            className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl border border-shop_light_green/35 bg-white/90 text-lightColor"
+          >
+            <Logs className="h-4 w-4" />
+            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-shop_btn_dark_green px-1 text-[10px] font-semibold text-white">
+              {ordersCount}
+            </span>
+          </Link>
+        ) : null}
 
         {isAuthReady ? (
           isSignedIn ? (
             <UserButton />
           ) : (
-            <SignIn className="h-8 px-3 py-1 text-xs" />
+            <SignIn className="h-9 rounded-xl px-3 py-1 text-xs" />
           )
         ) : (
-          <div className="h-8 w-8 rounded-full border border-shop_light_green/20 bg-white/70" />
+          <div className="h-9 w-9 rounded-xl border border-shop_light_green/20 bg-white/70" />
         )}
       </div>
     </>

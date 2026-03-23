@@ -50,7 +50,7 @@ const AddToCartButton = ({ product, className }: Props) => {
           onClick={handleAddToCart}
           disabled={!hasHydrated || isOutOfStock}
           className={cn(
-            "w-full h-auto min-h-10 px-2 sm:px-3 bg-shop_dark_green/80 text-lightBg shadow-none border border-shop_dark_green/80 font-semibold text-[11px] sm:text-sm tracking-normal text-white hover:bg-shop_dark_green hover:border-shop_dark_green hoverEffect",
+            "h-10 w-full rounded-md border border-shop_dark_green bg-shop_dark_green px-3 text-sm font-semibold tracking-normal text-white shadow-none hover:border-shop_btn_dark_green hover:bg-shop_btn_dark_green hoverEffect",
             className
           )}
         >
@@ -69,4 +69,3 @@ const AddToCartButton = ({ product, className }: Props) => {
 };
 
 export default AddToCartButton;
-

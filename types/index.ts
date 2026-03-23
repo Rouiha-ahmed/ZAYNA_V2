@@ -31,6 +31,8 @@ export type Category = {
   featured?: boolean | null;
   image?: AppImage | null;
   productCount?: number;
+  parentId?: string | null;
+  parentTitle?: string | null;
 };
 
 export type ProductBrand = Pick<Brand, "_id" | "title" | "slug" | "image">;
@@ -41,14 +43,24 @@ export type Product = {
   _id: string;
   name?: string;
   slug?: Slug;
+  sku?: string;
+  barcode?: string | null;
   images?: AppImage[];
+  shortDescription?: string | null;
+  fullDescription?: string | null;
   description?: string | null;
   price?: number;
+  regularPrice?: number;
+  salePrice?: number | null;
   discount?: number;
   categories?: string[];
   stock?: number;
   status?: ProductStatusValue | null;
+  isActive?: boolean;
   isFeatured?: boolean;
+  isBestSeller?: boolean;
+  isNewArrival?: boolean;
+  isPromotion?: boolean;
   brand?: ProductBrand | null;
 };
 

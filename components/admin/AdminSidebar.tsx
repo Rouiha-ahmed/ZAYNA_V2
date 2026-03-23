@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import {
   ChevronLeft,
+  House,
   LayoutDashboard,
   Package2,
   Percent,
@@ -53,6 +54,15 @@ export const buildAdminSidebarItems = (metrics: {
     icon: ShoppingBag,
     badge: metrics.pendingOrders || undefined,
     badgeTone: "bg-amber-400/15 text-amber-100 ring-amber-300/30",
+  },
+  {
+    id: "homepage",
+    label: "Homepage",
+    description: "Contenu hero, liens, confiance et sections dynamiques",
+    href: "/admin/homepage",
+    actionHref: "/admin/homepage#general-settings",
+    actionLabel: "Configurer l'accueil",
+    icon: House,
   },
   {
     id: "products",

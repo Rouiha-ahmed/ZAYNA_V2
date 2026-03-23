@@ -452,7 +452,12 @@ const fetchAdminDashboardData = async (): Promise<AdminDashboardData> => {
       orderBy: {
         title: "asc",
       },
-      include: {
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        imageUrl: true,
+        updatedAt: true,
         _count: {
           select: {
             products: true,
@@ -473,6 +478,9 @@ const fetchAdminDashboardData = async (): Promise<AdminDashboardData> => {
         images: {
           orderBy: {
             sortOrder: "asc",
+          },
+          select: {
+            url: true,
           },
         },
         categories: {
@@ -532,6 +540,9 @@ const fetchAdminDashboardData = async (): Promise<AdminDashboardData> => {
         images: {
           orderBy: {
             sortOrder: "asc",
+          },
+          select: {
+            url: true,
           },
           take: 1,
         },

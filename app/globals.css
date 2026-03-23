@@ -5,7 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme{
-  --font-poppins: Poppins, sans-serif;
+  --font-poppins: "DM Sans", "Poppins", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --color-shop_light_pink: #fdf8e1;
   --color-shop_dark_green: #1F3C88;
   --color-shop_btn_dark_green: #162E6E;
@@ -133,11 +133,24 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-size: 15px;
+    line-height: 1.5;
+    letter-spacing: 0;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    line-height: 1.15;
+    letter-spacing: -0.01em;
   }
   .hoverEffect{
     @apply transition-all duration-300 ease-in-out;
   }
   button{
     @apply hover:cursor-pointer;
+  }
+}
+
+@layer utilities {
+  .font-menu {
+    font-family: var(--font-menu), "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   }
 }

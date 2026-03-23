@@ -48,6 +48,12 @@ enum LoyaltyTier {
   gold
 }
 
+enum SiteLinkGroup {
+  header
+  footer_quick
+  footer_legal
+}
+
 model User {
   id                   String      @id @default(cuid())
   clerkUserId          String      @unique
@@ -93,11 +99,15 @@ model Category {
   range       Int?
   featured    Boolean           @default(false)
   imageUrl    String?
+  parentId    String?
+  parent      Category?         @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Category[]        @relation("CategoryTree")
   products    ProductCategory[]
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
   @@index([title])
+  @@index([parentId, title])
 }
 
 model Brand {
@@ -106,6 +116,7 @@ model Brand {
   slug        String    @unique
   description String?
   imageUrl    String?
+  isActive    Boolean   @default(true)
   products    Product[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -114,40 +125,99 @@ model Brand {
 }
 
 model Product {
-  id          String            @id @default(cuid())
-  name        String
-  slug        String            @unique
-  description String?
-  price       Decimal           @db.Decimal(10, 2)
-  discount    Int               @default(0)
-  stock       Int               @default(0)
-  status      ProductStatus     @default(new)
-  isFeatured  Boolean           @default(false)
-  brandId     String?
-  brand       Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
-  images      ProductImage[]
-  categories  ProductCategory[]
-  orderItems  OrderItem[]
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id                String            @id @default(cuid())
+  name              String
+  slug              String            @unique
+  sku               String            @unique
+  barcode           String?
+  shortDescription  String?
+  fullDescription   String?
+  description       String?
+  price             Decimal           @db.Decimal(10, 2)
+  regularPrice      Decimal           @db.Decimal(10, 2)
+  salePrice         Decimal?          @db.Decimal(10, 2)
+  discount          Int               @default(0)
+  stock             Int               @default(0)
+  status            ProductStatus     @default(new)
+  isActive          Boolean           @default(true)
+  isFeatured        Boolean           @default(false)
+  isBestSeller      Boolean           @default(false)
+  isNewArrival      Boolean           @default(false)
+  isPromotion       Boolean           @default(false)
+  seoTitle          String?
+  seoDescription    String?
+  seoKeywords       String?
+  brandId           String?
+  brand             Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  images            ProductImage[]
+  variants          ProductVariant[]
+  categories        ProductCategory[]
+  relatedProducts   ProductRelated[]  @relation("ProductRelatedProducts")
+  relatedToProducts ProductRelated[]  @relation("ProductRelatedToProducts")
+  orderItems        OrderItem[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   @@index([name])
+  @@index([sku])
   @@index([brandId])
   @@index([status])
   @@index([price])
+  @@index([isActive, isFeatured, isBestSeller, isNewArrival, isPromotion])
 }
 
 model ProductImage {
-  id        String   @id @default(cuid())
+  id        String          @id @default(cuid())
   productId String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId String?
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   url       String
   altText   String?
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  sortOrder Int             @default(0)
+  isPrimary Boolean         @default(false)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
 
   @@index([productId, sortOrder])
+  @@index([variantId, sortOrder])
+}
+
+model ProductVariant {
+  id           String         @id @default(cuid())
+  productId    String
+  product      Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  title        String
+  sku          String         @unique
+  barcode      String?
+  option1Name  String?
+  option1Value String?
+  option2Name  String?
+  option2Value String?
+  option3Name  String?
+  option3Value String?
+  regularPrice Decimal        @db.Decimal(10, 2)
+  salePrice    Decimal?       @db.Decimal(10, 2)
+  stock        Int            @default(0)
+  isActive     Boolean        @default(true)
+  sortOrder    Int            @default(0)
+  images       ProductImage[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([productId, sortOrder])
+  @@index([isActive, stock])
+}
+
+model ProductRelated {
+  productId        String
+  relatedProductId String
+  product          Product  @relation("ProductRelatedProducts", fields: [productId], references: [id], onDelete: Cascade)
+  relatedProduct   Product  @relation("ProductRelatedToProducts", fields: [relatedProductId], references: [id], onDelete: Cascade)
+  createdAt        DateTime @default(now())
+
+  @@id([productId, relatedProductId])
+  @@index([relatedProductId])
 }
 
 model ProductCategory {
@@ -168,7 +238,7 @@ model PromoCode {
   active                Boolean           @default(true)
   discountType          PromoDiscountType @default(percentage)
   discountValue         Decimal           @db.Decimal(10, 2)
-  minimumOrderAmount    Decimal           @db.Decimal(10, 2) @default(0)
+  minimumOrderAmount    Decimal           @default(0) @db.Decimal(10, 2)
   allowedPaymentMethods PaymentMethod[]
   startsAt              DateTime?
   endsAt                DateTime?
@@ -194,9 +264,9 @@ model Order {
   paymentStatus            PaymentStatus @default(pending)
   paymentMethod            PaymentMethod @default(cmi_card)
   totalPrice               Decimal       @db.Decimal(10, 2)
-  amountDiscount           Decimal       @db.Decimal(10, 2) @default(0)
+  amountDiscount           Decimal       @default(0) @db.Decimal(10, 2)
   promoCode                String?
-  promoDiscount            Decimal       @db.Decimal(10, 2) @default(0)
+  promoDiscount            Decimal       @default(0) @db.Decimal(10, 2)
   orderDate                DateTime      @default(now())
   installmentMonths        Int?
   installmentMonthlyAmount Decimal?      @db.Decimal(10, 2)
@@ -236,4 +306,119 @@ model OrderItem {
 
   @@index([orderId])
   @@index([productId])
+}
+
+model StorefrontSettings {
+  id                         String   @id @default("default")
+  announcementEnabled        Boolean  @default(true)
+  announcementText           String   @default("Livraison gratuite partout au Maroc des 299 MAD d'achat.")
+  announcementHref           String?
+  heroAutoplayMs             Int      @default(5000)
+  featuredCategoriesTitle    String   @default("Categories en vedette")
+  featuredCategoriesSubtitle String   @default("Retrouvez les univers les plus demandes par nos clientes.")
+  promotionsTitle            String   @default("Promotions du moment")
+  promotionsSubtitle         String   @default("Des remises actives sur une selection de produits.")
+  bestSellersTitle           String   @default("Meilleures ventes")
+  bestSellersSubtitle        String   @default("Les produits les plus commandes cette semaine.")
+  newArrivalsTitle           String   @default("Nouveautes")
+  newArrivalsSubtitle        String   @default("Les derniers ajouts de notre catalogue.")
+  brandsTitle                String   @default("Marques partenaires")
+  brandsSubtitle             String   @default("Des marques dermo-cosmetiques reconnues.")
+  trustTitle                 String   @default("Pourquoi commander chez Zayna")
+  trustSubtitle              String   @default("Des engagements clairs pour une experience d'achat fluide.")
+  loyaltyBadge               String   @default("Programme fidelite")
+  loyaltyTitle               String   @default("Cumulez des avantages a chaque commande")
+  loyaltyDescription         String   @default("Activez votre carte fidelite pour debloquer des offres reservees, des remises personnalisees et un suivi sur mesure.")
+  loyaltyCtaLabel            String   @default("Demander ma carte")
+  loyaltyCtaHref             String   @default("/#contact")
+  loyaltyHighlightText       String   @default("Service client disponible 7j/7")
+  loyaltyImageUrl            String?
+  newsletterTitle            String   @default("Restez informee des nouveautes")
+  newsletterDescription      String   @default("Recevez nos conseils beaute, offres et lancements en avant-premiere.")
+  newsletterPlaceholder      String   @default("Votre adresse e-mail")
+  newsletterButtonLabel      String   @default("S'abonner")
+  newsletterSuccessMessage   String   @default("Merci, votre inscription a bien ete prise en compte.")
+  newsletterErrorMessage     String   @default("Impossible de valider votre inscription pour le moment.")
+  footerAboutTitle           String   @default("A propos de Zayna")
+  footerAboutDescription     String   @default("Votre parapharmacie en ligne pour une routine beaute et bien-etre complete.")
+  footerQuickLinksTitle      String   @default("Liens rapides")
+  footerLegalLinksTitle      String   @default("Informations legales")
+  footerCategoriesTitle      String   @default("Categories")
+  footerContactPhone         String?
+  footerContactEmail         String?
+  footerContactHours         String?
+  footerCopyrightText        String   @default("ZAYNA. Tous droits reserves.")
+  featuredCategoriesLimit    Int      @default(8)
+  promotionsLimit            Int      @default(10)
+  bestSellersLimit           Int      @default(10)
+  newArrivalsLimit           Int      @default(10)
+  brandsLimit                Int      @default(12)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+}
+
+model HomeHeroSlide {
+  id        String   @id @default(cuid())
+  badge     String?
+  title     String
+  subtitle  String?
+  ctaLabel  String?
+  ctaHref   String?
+  imageUrl  String?
+  altText   String?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+model HomeTrustItem {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  icon        String
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+model SiteLink {
+  id           String        @id @default(cuid())
+  group        SiteLinkGroup
+  title        String
+  href         String
+  sortOrder    Int           @default(0)
+  openInNewTab Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([group, sortOrder])
+}
+
+model SiteSocialLink {
+  id           String   @id @default(cuid())
+  platform     String
+  title        String
+  href         String
+  sortOrder    Int      @default(0)
+  openInNewTab Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([sortOrder])
+}
+
+model NewsletterSubscription {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, createdAt])
 }

@@ -3,6 +3,7 @@ import {
   PrismaClient,
   ProductStatus,
   PromoDiscountType,
+  SiteLinkGroup,
 } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -528,7 +529,231 @@ const promoSeed: PromoSeed[] = [
   },
 ];
 
+const storefrontSettingsSeed = {
+  id: "default",
+  announcementEnabled: true,
+  announcementText:
+    "Livraison offerte a partir de 299 MAD et paiement a la livraison disponible.",
+  announcementHref: "/shop",
+  featuredCategoriesTitle: "Nos categories favorites",
+  featuredCategoriesSubtitle:
+    "Des rayons clairs pour trouver rapidement les soins adaptes a vos besoins.",
+  promotionsTitle: "Offres et promotions",
+  promotionsSubtitle:
+    "Une selection de produits avec remises actives et stock mis a jour en temps reel.",
+  bestSellersTitle: "Produits les plus commandes",
+  bestSellersSubtitle:
+    "Les references les plus appreciees par nos clientes cette periode.",
+  newArrivalsTitle: "Nouveautes Zayna",
+  newArrivalsSubtitle:
+    "Decouvrez les derniers ajouts valides par notre equipe.",
+  brandsTitle: "Acheter par marque",
+  brandsSubtitle: "Retrouvez toutes vos marques preferees au meme endroit.",
+  trustTitle: "Pourquoi choisir Zayna",
+  trustSubtitle:
+    "Un accompagnement fiable, une logistique rapide et un service humain.",
+  loyaltyBadge: "Carte fidelite",
+  loyaltyTitle: "Cumulez des avantages exclusifs",
+  loyaltyDescription:
+    "Demandez votre carte fidelite et beneficiez d'offres reservees, de points cumules et de conseils personnalises.",
+  loyaltyCtaLabel: "Demander ma carte",
+  loyaltyCtaHref: "/#contact",
+  loyaltyHighlightText: "Conseilleres disponibles 7j/7 pour vous accompagner.",
+  loyaltyImageUrl: "/carte-fideliteEEEEE.png",
+  newsletterTitle: "Rejoignez la communaute Zayna",
+  newsletterDescription:
+    "Recevez nos offres en avant-premiere, nos conseils routine et nos lancements produits.",
+  newsletterPlaceholder: "Saisissez votre e-mail",
+  newsletterButtonLabel: "Je m'inscris",
+  newsletterSuccessMessage:
+    "Merci. Votre inscription newsletter est confirmee.",
+  newsletterErrorMessage:
+    "Une erreur est survenue. Merci de reessayer dans quelques instants.",
+  footerAboutTitle: "Zayna Parapharmacie",
+  footerAboutDescription:
+    "Produits dermo-cosmetiques, routines et conseils pour prendre soin de vous au quotidien.",
+  footerQuickLinksTitle: "Navigation",
+  footerLegalLinksTitle: "Pages legales",
+  footerCategoriesTitle: "Categories populaires",
+  footerContactPhone: "+212 6 12 34 56 78",
+  footerContactEmail: "contact@zayna.ma",
+  footerContactHours: "Lun-Sam : 9h00 - 20h00",
+  footerCopyrightText: "ZAYNA. Tous droits reserves.",
+  featuredCategoriesLimit: 8,
+  promotionsLimit: 10,
+  bestSellersLimit: 10,
+  newArrivalsLimit: 10,
+  brandsLimit: 12,
+  heroAutoplayMs: 5200,
+};
+
+const heroSlidesSeed = [
+  {
+    badge: "Nouveautes beaute",
+    title: "Vos essentiels para, livres en 24/48h",
+    subtitle:
+      "Des soins visage, corps et cheveux soigneusement selectionnes avec des prix transparents.",
+    ctaLabel: "Explorer la boutique",
+    ctaHref: "/shop",
+    imageUrl: assetUrl("banner", "banner_1.webp"),
+    altText: "Produits para et beaute Zayna",
+    sortOrder: 0,
+    isActive: true,
+  },
+  {
+    badge: "Promotions actives",
+    title: "Jusqu'a -25% sur vos routines du moment",
+    subtitle:
+      "Profitez d'offres limites sur les references les plus recherchees de notre catalogue.",
+    ctaLabel: "Voir les promotions",
+    ctaHref: "/deal",
+    imageUrl: assetUrl("products", "product_17.png"),
+    altText: "Produits en promotion",
+    sortOrder: 1,
+    isActive: true,
+  },
+  {
+    badge: "Programme fidelite",
+    title: "Cumulez des points des votre premiere commande",
+    subtitle:
+      "Inscrivez-vous et recevez des avantages personnalises adaptes a vos achats.",
+    ctaLabel: "Activer ma fidelite",
+    ctaHref: "/#contact",
+    imageUrl: "/carte-fideliteEEEEE.png",
+    altText: "Carte fidelite Zayna",
+    sortOrder: 2,
+    isActive: true,
+  },
+];
+
+const trustItemsSeed = [
+  {
+    title: "Livraison rapide",
+    description: "Expedition partout au Maroc avec suivi en temps reel.",
+    icon: "truck",
+    sortOrder: 0,
+    isActive: true,
+  },
+  {
+    title: "Produits verifies",
+    description: "Catalogue controle et references de marques reconnues.",
+    icon: "shield",
+    sortOrder: 1,
+    isActive: true,
+  },
+  {
+    title: "Support dedie",
+    description: "Une equipe a l'ecoute avant et apres votre commande.",
+    icon: "headset",
+    sortOrder: 2,
+    isActive: true,
+  },
+  {
+    title: "Paiement flexible",
+    description: "Carte bancaire, paiement a la livraison ou en plusieurs fois.",
+    icon: "wallet",
+    sortOrder: 3,
+    isActive: true,
+  },
+];
+
+const siteLinksSeed = [
+  {
+    group: SiteLinkGroup.header,
+    title: "Accueil",
+    href: "/",
+    sortOrder: 0,
+    openInNewTab: false,
+  },
+  {
+    group: SiteLinkGroup.header,
+    title: "Boutique",
+    href: "/shop",
+    sortOrder: 1,
+    openInNewTab: false,
+  },
+  {
+    group: SiteLinkGroup.header,
+    title: "Promotions",
+    href: "/deal",
+    sortOrder: 2,
+    openInNewTab: false,
+  },
+  {
+    group: SiteLinkGroup.header,
+    title: "Contact",
+    href: "/#contact",
+    sortOrder: 3,
+    openInNewTab: false,
+  },
+  {
+    group: SiteLinkGroup.footer_quick,
+    title: "A propos",
+    href: "/about",
+    sortOrder: 0,
+    openInNewTab: false,
+  },
+  {
+    group: SiteLinkGroup.footer_quick,
+    title: "Contactez-nous",
+    href: "/#contact",
+    sortOrder: 1,
+    openInNewTab: false,
+  },
+  {
+    group: SiteLinkGroup.footer_quick,
+    title: "Boutique",
+    href: "/shop",
+    sortOrder: 2,
+    openInNewTab: false,
+  },
+  {
+    group: SiteLinkGroup.footer_legal,
+    title: "Conditions generales",
+    href: "/terms",
+    sortOrder: 0,
+    openInNewTab: false,
+  },
+  {
+    group: SiteLinkGroup.footer_legal,
+    title: "Politique de confidentialite",
+    href: "/privacy",
+    sortOrder: 1,
+    openInNewTab: false,
+  },
+];
+
+const socialLinksSeed = [
+  {
+    platform: "facebook",
+    title: "Facebook",
+    href: "https://www.facebook.com/",
+    sortOrder: 0,
+    openInNewTab: true,
+  },
+  {
+    platform: "instagram",
+    title: "Instagram",
+    href: "https://www.instagram.com/",
+    sortOrder: 1,
+    openInNewTab: true,
+  },
+  {
+    platform: "tiktok",
+    title: "TikTok",
+    href: "https://www.tiktok.com/",
+    sortOrder: 2,
+    openInNewTab: true,
+  },
+];
+
 async function main() {
+  await prisma.newsletterSubscription.deleteMany();
+  await prisma.siteSocialLink.deleteMany();
+  await prisma.siteLink.deleteMany();
+  await prisma.homeTrustItem.deleteMany();
+  await prisma.homeHeroSlide.deleteMany();
+  await prisma.storefrontSettings.deleteMany();
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
   await prisma.address.deleteMany();
@@ -577,8 +802,14 @@ async function main() {
       data: {
         name: product.name,
         slug: product.slug,
+        sku: product.slug.toUpperCase(),
         description: product.description,
         price: product.price,
+        regularPrice:
+          product.discount > 0
+            ? Number((product.price + (product.discount * product.price) / 100).toFixed(2))
+            : product.price,
+        salePrice: product.discount > 0 ? product.price : null,
         discount: product.discount,
         stock: product.stock,
         status: product.status,
@@ -614,8 +845,36 @@ async function main() {
     });
   }
 
+  await prisma.storefrontSettings.create({
+    data: storefrontSettingsSeed,
+  });
+
+  for (const slide of heroSlidesSeed) {
+    await prisma.homeHeroSlide.create({
+      data: slide,
+    });
+  }
+
+  for (const item of trustItemsSeed) {
+    await prisma.homeTrustItem.create({
+      data: item,
+    });
+  }
+
+  for (const link of siteLinksSeed) {
+    await prisma.siteLink.create({
+      data: link,
+    });
+  }
+
+  for (const socialLink of socialLinksSeed) {
+    await prisma.siteSocialLink.create({
+      data: socialLink,
+    });
+  }
+
   console.log(
-    `Seeded ${categorySeed.length} categories, ${brandSeed.length} brands, ${productSeed.length} products, and ${promoSeed.length} promo codes.`
+    `Seeded ${categorySeed.length} categories, ${brandSeed.length} brands, ${productSeed.length} products, ${promoSeed.length} promo codes, ${heroSlidesSeed.length} hero slides, ${trustItemsSeed.length} trust items, ${siteLinksSeed.length} site links, and ${socialLinksSeed.length} social links.`
   );
 }
 

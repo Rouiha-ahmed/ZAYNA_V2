@@ -86,6 +86,9 @@ export async function createManualOrderRecord(input: CreateManualOrderInput) {
         orderBy: {
           sortOrder: "asc",
         },
+        select: {
+          url: true,
+        },
       },
     },
   });
@@ -135,6 +138,9 @@ export async function createManualOrderRecord(input: CreateManualOrderInput) {
         images: {
           orderBy: {
             sortOrder: "asc",
+          },
+          select: {
+            url: true,
           },
         },
       },
@@ -317,6 +323,9 @@ export async function createOrderFromStripeSession(
         images: {
           orderBy: {
             sortOrder: "asc",
+          },
+          select: {
+            url: true,
           },
         },
       },

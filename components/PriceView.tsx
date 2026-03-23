@@ -5,26 +5,48 @@ import PriceFormatter from "./PriceFormatter";
 interface Props {
   price: number | undefined;
   discount: number | undefined;
+  regularPrice?: number | null;
+  salePrice?: number | null;
   className?: string;
 }
-const PriceView = ({ price, discount, className }: Props) => {
+const PriceView = ({ price, discount, regularPrice, salePrice, className }: Props) => {
+  const safePrice = typeof price === "number" ? price : 0;
+  const safeRegularPrice =
+    typeof regularPrice === "number" && regularPrice > 0 ? regularPrice : safePrice;
+  const safeSalePrice =
+    typeof salePrice === "number" && salePrice > 0 && salePrice < safeRegularPrice
+      ? salePrice
+      : null;
+  const currentPrice = safeSalePrice ?? safePrice;
+  const oldPrice =
+    safeSalePrice !== null
+      ? safeRegularPrice
+      : safePrice > 0 && typeof discount === "number" && discount > 0
+        ? safePrice + (discount * safePrice) / 100
+        : null;
+
   return (
-    <div className="flex items-center justify-between gap-5">
-      <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <PriceFormatter
-          amount={price}
-          className={cn("text-shop_dark_green", className)}
+          amount={currentPrice}
+          className={cn("font-bold text-shop_dark_green", className)}
         />
-        {price && discount && (
+        {oldPrice ? (
           <PriceFormatter
-            amount={price + (discount * price) / 100}
+            amount={oldPrice}
             className={twMerge(
-              "line-through text-xs font-normal text-zinc-500",
+              "text-xs font-medium text-zinc-500 line-through",
               className
             )}
           />
-        )}
+        ) : null}
       </div>
+      {discount && discount > 0 ? (
+        <span className="rounded-sm bg-shop_light_bg px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.05em] text-shop_dark_green">
+          -{discount}%
+        </span>
+      ) : null}
     </div>
   );
 };

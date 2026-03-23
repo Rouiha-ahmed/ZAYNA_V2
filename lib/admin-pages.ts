@@ -475,10 +475,16 @@ async function fetchAdminOverviewData(): Promise<AdminOverviewData> {
           updatedAt: "desc",
         },
       ],
-      include: {
+      select: {
+        id: true,
+        name: true,
+        stock: true,
         images: {
           orderBy: {
             sortOrder: "asc",
+          },
+          select: {
+            url: true,
           },
           take: 1,
         },
@@ -743,7 +749,17 @@ async function fetchAdminProductsPageData(): Promise<AdminProductsPageData> {
       orderBy: {
         updatedAt: "desc",
       },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        price: true,
+        discount: true,
+        stock: true,
+        status: true,
+        isFeatured: true,
+        brandId: true,
+        updatedAt: true,
         brand: {
           select: {
             title: true,
@@ -752,6 +768,9 @@ async function fetchAdminProductsPageData(): Promise<AdminProductsPageData> {
         images: {
           orderBy: {
             sortOrder: "asc",
+          },
+          select: {
+            url: true,
           },
         },
         categories: {
@@ -771,7 +790,12 @@ async function fetchAdminProductsPageData(): Promise<AdminProductsPageData> {
       orderBy: {
         title: "asc",
       },
-      include: {
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        imageUrl: true,
+        updatedAt: true,
         _count: {
           select: {
             products: true,
@@ -783,7 +807,13 @@ async function fetchAdminProductsPageData(): Promise<AdminProductsPageData> {
       orderBy: {
         title: "asc",
       },
-      include: {
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        featured: true,
+        imageUrl: true,
+        updatedAt: true,
         _count: {
           select: {
             products: true,
@@ -805,10 +835,16 @@ async function fetchAdminProductsPageData(): Promise<AdminProductsPageData> {
           updatedAt: "desc",
         },
       ],
-      include: {
+      select: {
+        id: true,
+        name: true,
+        stock: true,
         images: {
           orderBy: {
             sortOrder: "asc",
+          },
+          select: {
+            url: true,
           },
           take: 1,
         },
@@ -875,7 +911,13 @@ async function fetchAdminCategoriesPageData(): Promise<AdminCategoriesPageData> 
       orderBy: {
         title: "asc",
       },
-      include: {
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        featured: true,
+        imageUrl: true,
+        updatedAt: true,
         _count: {
           select: {
             products: true,
@@ -937,7 +979,12 @@ async function fetchAdminBrandsPageData(): Promise<AdminBrandsPageData> {
       orderBy: {
         title: "asc",
       },
-      include: {
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        imageUrl: true,
+        updatedAt: true,
         _count: {
           select: {
             products: true,
@@ -977,6 +1024,287 @@ export async function getAdminBrandsPageData(): Promise<AdminBrandsPageData> {
     ...data,
     brands: normalizeBrands(data.brands),
   };
+}
+
+export type AdminHomepagePageData = {
+  metrics: {
+    heroSlides: number;
+    trustItems: number;
+    headerLinks: number;
+    footerLinks: number;
+    socialLinks: number;
+    newsletterSubscribers: number;
+  };
+  settings: {
+    announcementEnabled: boolean;
+    announcementText: string;
+    announcementHref: string | null;
+    heroAutoplayMs: number;
+    featuredCategoriesTitle: string;
+    featuredCategoriesSubtitle: string;
+    promotionsTitle: string;
+    promotionsSubtitle: string;
+    bestSellersTitle: string;
+    bestSellersSubtitle: string;
+    newArrivalsTitle: string;
+    newArrivalsSubtitle: string;
+    brandsTitle: string;
+    brandsSubtitle: string;
+    trustTitle: string;
+    trustSubtitle: string;
+    loyaltyBadge: string;
+    loyaltyTitle: string;
+    loyaltyDescription: string;
+    loyaltyCtaLabel: string;
+    loyaltyCtaHref: string;
+    loyaltyHighlightText: string;
+    loyaltyImageUrl: string | null;
+    newsletterTitle: string;
+    newsletterDescription: string;
+    newsletterPlaceholder: string;
+    newsletterButtonLabel: string;
+    newsletterSuccessMessage: string;
+    newsletterErrorMessage: string;
+    footerAboutTitle: string;
+    footerAboutDescription: string;
+    footerQuickLinksTitle: string;
+    footerLegalLinksTitle: string;
+    footerCategoriesTitle: string;
+    footerContactPhone: string | null;
+    footerContactEmail: string | null;
+    footerContactHours: string | null;
+    footerCopyrightText: string;
+    featuredCategoriesLimit: number;
+    promotionsLimit: number;
+    bestSellersLimit: number;
+    newArrivalsLimit: number;
+    brandsLimit: number;
+  };
+  heroSlides: Array<{
+    id: string;
+    badge: string | null;
+    title: string;
+    subtitle: string | null;
+    ctaLabel: string | null;
+    ctaHref: string | null;
+    imageUrl: string | null;
+    altText: string | null;
+    sortOrder: number;
+    isActive: boolean;
+  }>;
+  trustItems: Array<{
+    id: string;
+    title: string;
+    description: string;
+    icon: string;
+    sortOrder: number;
+    isActive: boolean;
+  }>;
+  links: Array<{
+    id: string;
+    group: "header" | "footer_quick" | "footer_legal";
+    title: string;
+    href: string;
+    sortOrder: number;
+    openInNewTab: boolean;
+  }>;
+  socialLinks: Array<{
+    id: string;
+    platform: string;
+    title: string;
+    href: string;
+    sortOrder: number;
+    openInNewTab: boolean;
+  }>;
+};
+
+const defaultHomepageSettings: AdminHomepagePageData["settings"] = {
+  announcementEnabled: true,
+  announcementText: "Livraison gratuite partout au Maroc des 299 MAD d'achat.",
+  announcementHref: "/shop",
+  heroAutoplayMs: 5000,
+  featuredCategoriesTitle: "Categories en vedette",
+  featuredCategoriesSubtitle: "Retrouvez les univers les plus demandes par nos clientes.",
+  promotionsTitle: "Promotions du moment",
+  promotionsSubtitle: "Des remises actives sur une selection de produits.",
+  bestSellersTitle: "Meilleures ventes",
+  bestSellersSubtitle: "Les produits les plus commandes cette semaine.",
+  newArrivalsTitle: "Nouveautes",
+  newArrivalsSubtitle: "Les derniers ajouts de notre catalogue.",
+  brandsTitle: "Marques partenaires",
+  brandsSubtitle: "Des marques dermo-cosmetiques reconnues.",
+  trustTitle: "Pourquoi commander chez Zayna",
+  trustSubtitle: "Des engagements clairs pour une experience d'achat fluide.",
+  loyaltyBadge: "Programme fidelite",
+  loyaltyTitle: "Cumulez des avantages a chaque commande",
+  loyaltyDescription:
+    "Activez votre carte fidelite pour debloquer des offres reservees, des remises personnalisees et un suivi sur mesure.",
+  loyaltyCtaLabel: "Demander ma carte",
+  loyaltyCtaHref: "/#contact",
+  loyaltyHighlightText: "Service client disponible 7j/7",
+  loyaltyImageUrl: null,
+  newsletterTitle: "Restez informee des nouveautes",
+  newsletterDescription: "Recevez nos conseils beaute, offres et lancements en avant-premiere.",
+  newsletterPlaceholder: "Votre adresse e-mail",
+  newsletterButtonLabel: "S'abonner",
+  newsletterSuccessMessage: "Merci, votre inscription a bien ete prise en compte.",
+  newsletterErrorMessage: "Impossible de valider votre inscription pour le moment.",
+  footerAboutTitle: "A propos de Zayna",
+  footerAboutDescription:
+    "Votre parapharmacie en ligne pour une routine beaute et bien-etre complete.",
+  footerQuickLinksTitle: "Liens rapides",
+  footerLegalLinksTitle: "Informations legales",
+  footerCategoriesTitle: "Categories",
+  footerContactPhone: null,
+  footerContactEmail: null,
+  footerContactHours: null,
+  footerCopyrightText: "ZAYNA. Tous droits reserves.",
+  featuredCategoriesLimit: 8,
+  promotionsLimit: 10,
+  bestSellersLimit: 10,
+  newArrivalsLimit: 10,
+  brandsLimit: 12,
+};
+
+async function fetchAdminHomepagePageData(): Promise<AdminHomepagePageData> {
+  const [settingsRecord, heroSlides, trustItems, links, socialLinks, newsletterSubscribers] =
+    await Promise.all([
+      prisma.storefrontSettings.findUnique({
+        where: {
+          id: "default",
+        },
+      }),
+      prisma.homeHeroSlide.findMany({
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      }),
+      prisma.homeTrustItem.findMany({
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      }),
+      prisma.siteLink.findMany({
+        orderBy: [{ group: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
+      }),
+      prisma.siteSocialLink.findMany({
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      }),
+      prisma.newsletterSubscription.count({
+        where: {
+          isActive: true,
+        },
+      }),
+    ]);
+
+  const settings = settingsRecord
+    ? {
+        announcementEnabled: settingsRecord.announcementEnabled,
+        announcementText: settingsRecord.announcementText,
+        announcementHref: settingsRecord.announcementHref,
+        heroAutoplayMs: settingsRecord.heroAutoplayMs,
+        featuredCategoriesTitle: settingsRecord.featuredCategoriesTitle,
+        featuredCategoriesSubtitle: settingsRecord.featuredCategoriesSubtitle,
+        promotionsTitle: settingsRecord.promotionsTitle,
+        promotionsSubtitle: settingsRecord.promotionsSubtitle,
+        bestSellersTitle: settingsRecord.bestSellersTitle,
+        bestSellersSubtitle: settingsRecord.bestSellersSubtitle,
+        newArrivalsTitle: settingsRecord.newArrivalsTitle,
+        newArrivalsSubtitle: settingsRecord.newArrivalsSubtitle,
+        brandsTitle: settingsRecord.brandsTitle,
+        brandsSubtitle: settingsRecord.brandsSubtitle,
+        trustTitle: settingsRecord.trustTitle,
+        trustSubtitle: settingsRecord.trustSubtitle,
+        loyaltyBadge: settingsRecord.loyaltyBadge,
+        loyaltyTitle: settingsRecord.loyaltyTitle,
+        loyaltyDescription: settingsRecord.loyaltyDescription,
+        loyaltyCtaLabel: settingsRecord.loyaltyCtaLabel,
+        loyaltyCtaHref: settingsRecord.loyaltyCtaHref,
+        loyaltyHighlightText: settingsRecord.loyaltyHighlightText,
+        loyaltyImageUrl: settingsRecord.loyaltyImageUrl,
+        newsletterTitle: settingsRecord.newsletterTitle,
+        newsletterDescription: settingsRecord.newsletterDescription,
+        newsletterPlaceholder: settingsRecord.newsletterPlaceholder,
+        newsletterButtonLabel: settingsRecord.newsletterButtonLabel,
+        newsletterSuccessMessage: settingsRecord.newsletterSuccessMessage,
+        newsletterErrorMessage: settingsRecord.newsletterErrorMessage,
+        footerAboutTitle: settingsRecord.footerAboutTitle,
+        footerAboutDescription: settingsRecord.footerAboutDescription,
+        footerQuickLinksTitle: settingsRecord.footerQuickLinksTitle,
+        footerLegalLinksTitle: settingsRecord.footerLegalLinksTitle,
+        footerCategoriesTitle: settingsRecord.footerCategoriesTitle,
+        footerContactPhone: settingsRecord.footerContactPhone,
+        footerContactEmail: settingsRecord.footerContactEmail,
+        footerContactHours: settingsRecord.footerContactHours,
+        footerCopyrightText: settingsRecord.footerCopyrightText,
+        featuredCategoriesLimit: settingsRecord.featuredCategoriesLimit,
+        promotionsLimit: settingsRecord.promotionsLimit,
+        bestSellersLimit: settingsRecord.bestSellersLimit,
+        newArrivalsLimit: settingsRecord.newArrivalsLimit,
+        brandsLimit: settingsRecord.brandsLimit,
+      }
+    : defaultHomepageSettings;
+
+  const headerLinks = links.filter((link) => link.group === "header").length;
+  const footerLinks = links.filter((link) => link.group !== "header").length;
+
+  return {
+    metrics: {
+      heroSlides: heroSlides.length,
+      trustItems: trustItems.length,
+      headerLinks,
+      footerLinks,
+      socialLinks: socialLinks.length,
+      newsletterSubscribers,
+    },
+    settings,
+    heroSlides: heroSlides.map((slide) => ({
+      id: slide.id,
+      badge: slide.badge,
+      title: slide.title,
+      subtitle: slide.subtitle,
+      ctaLabel: slide.ctaLabel,
+      ctaHref: slide.ctaHref,
+      imageUrl: slide.imageUrl,
+      altText: slide.altText,
+      sortOrder: slide.sortOrder,
+      isActive: slide.isActive,
+    })),
+    trustItems: trustItems.map((item) => ({
+      id: item.id,
+      title: item.title,
+      description: item.description,
+      icon: item.icon,
+      sortOrder: item.sortOrder,
+      isActive: item.isActive,
+    })),
+    links: links.map((link) => ({
+      id: link.id,
+      group: link.group,
+      title: link.title,
+      href: link.href,
+      sortOrder: link.sortOrder,
+      openInNewTab: link.openInNewTab,
+    })),
+    socialLinks: socialLinks.map((item) => ({
+      id: item.id,
+      platform: item.platform,
+      title: item.title,
+      href: item.href,
+      sortOrder: item.sortOrder,
+      openInNewTab: item.openInNewTab,
+    })),
+  };
+}
+
+const getCachedAdminHomepagePageData = unstable_cache(
+  fetchAdminHomepagePageData,
+  ["admin-homepage-page-data"],
+  {
+    tags: [adminDataTag],
+    revalidate: 120,
+  }
+);
+
+export async function getAdminHomepagePageData(): Promise<AdminHomepagePageData> {
+  await requireAdmin();
+  return getCachedAdminHomepagePageData();
 }
 
 export type AdminPromoCodesPageData = {

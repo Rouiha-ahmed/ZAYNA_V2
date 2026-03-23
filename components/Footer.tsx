@@ -1,95 +1,108 @@
-import React from "react";
+import Link from "next/link";
+
 import Container from "./Container";
 import FooterTop from "./FooterTop";
 import Logo from "./Logo";
 import SocialMedia from "./SocialMedia";
 import { SubText, SubTitle } from "./ui/text";
-import { quickLinksData } from "@/constants/data";
-import Link from "next/link";
-import { Input } from "./ui/input";
-import { Button } from "./ui/button";
-import { getFooterCategories } from "@/lib/queries";
+import { getStorefrontShellData } from "@/lib/storefront";
 
-const Footer = async () => {
-  const categories = await getFooterCategories(undefined, 30);
+export default async function Footer() {
+  const shell = await getStorefrontShellData();
+  const settings = shell.settings;
 
   return (
-    <footer className="border-t border-shop_light_green/20 bg-gradient-to-b from-white to-shop_light_bg/40">
+    <footer className="border-t border-shop_light_green/20 bg-white">
       <Container>
-        <FooterTop />
+        <FooterTop
+          phone={settings.footerContactPhone}
+          hours={settings.footerContactHours}
+          email={settings.footerContactEmail}
+        />
 
-        <div className="py-10 md:py-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
-          <div className="rounded-xl border border-shop_light_green/20 bg-white p-5 md:p-6 shadow-sm">
+        <div className="grid grid-cols-1 gap-8 py-10 md:grid-cols-2 md:gap-10 md:py-12 lg:grid-cols-4">
+          <div>
             <Logo />
-            <SubText className="mt-4">
-              Decouvrez nos collections selectionnees avec soin, alliant style
-              et confort pour votre quotidien.
-            </SubText>
+            <SubTitle className="mt-4 text-[15px] font-bold">{settings.footerAboutTitle}</SubTitle>
+            <SubText className="mt-2">{settings.footerAboutDescription}</SubText>
             <SocialMedia
+              links={shell.socialLinks}
               className="mt-4 text-darkColor/60"
-              iconClassName="border-darkColor/30 hover:border-shop_light_green hover:text-shop_light_green"
+              iconClassName="h-9 w-9 rounded-lg border-shop_light_green/30 hover:border-shop_light_green hover:text-shop_dark_green"
               tooltipClassName="bg-darkColor text-white"
             />
           </div>
 
-          <div className="rounded-xl border border-shop_light_green/20 bg-white p-5 md:p-6 shadow-sm">
-            <SubTitle>Liens rapides</SubTitle>
-            <ul className="space-y-2.5 mt-4 text-sm">
-              {quickLinksData?.map((item) => (
-                <li key={item?.title}>
+          <div>
+            <SubTitle className="text-[15px] font-bold">{settings.footerQuickLinksTitle}</SubTitle>
+            <ul className="mt-4 space-y-2.5 text-sm">
+              {shell.footerQuickLinks.map((item) => (
+                <li key={item.id}>
                   <Link
-                    href={item?.href}
-                    className="font-medium text-gray-700 hover:text-shop_light_green hoverEffect"
+                    href={item.href}
+                    target={item.openInNewTab ? "_blank" : undefined}
+                    rel={item.openInNewTab ? "noopener noreferrer" : undefined}
+                    className="font-medium text-gray-700 transition-colors hover:text-shop_dark_green"
                   >
-                    {item?.title}
+                    {item.title}
                   </Link>
                 </li>
               ))}
             </ul>
           </div>
 
-          <div className="rounded-xl border border-shop_light_green/20 bg-white p-5 md:p-6 shadow-sm">
-            <SubTitle>Categories</SubTitle>
-            <ul className="space-y-2.5 mt-4 text-sm">
-              {categories?.map((item) => (
-                <li key={item?._id}>
+          <div>
+            <SubTitle className="text-[15px] font-bold">{settings.footerCategoriesTitle}</SubTitle>
+            <ul className="mt-4 space-y-2.5 text-sm">
+              {shell.footerCategories.map((item) => (
+                <li key={item._id}>
                   <Link
-                    href={`/category/${item?.slug?.current}`}
-                    className="font-medium text-gray-700 hover:text-shop_light_green hoverEffect capitalize"
+                    href={item.slug?.current ? `/category/${item.slug.current}` : "/shop"}
+                    className="font-medium capitalize text-gray-700 transition-colors hover:text-shop_dark_green"
                   >
-                    {item?.title || "Categorie"}
+                    {item.title || "Categorie"}
                   </Link>
                 </li>
               ))}
             </ul>
           </div>
 
-          <div className="rounded-xl border border-shop_light_green/20 bg-white p-5 md:p-6 shadow-sm space-y-4">
-            <SubTitle>Newsletter</SubTitle>
-            <SubText>
-              Abonnez-vous pour recevoir nos nouveautes et offres exclusives.
-            </SubText>
-            <form className="space-y-3">
-              <Input
-                placeholder="Entrez votre e-mail"
-                type="email"
-                required
-                className="bg-white"
-              />
-              <Button className="w-full bg-shop_dark_green hover:bg-shop_dark_green/90">
-                S&apos;abonner
-              </Button>
-            </form>
+          <div className="space-y-4">
+            <SubTitle className="text-[15px] font-bold">{settings.footerLegalLinksTitle}</SubTitle>
+            <ul className="space-y-2.5 text-sm">
+              {shell.footerLegalLinks.map((item) => (
+                <li key={item.id}>
+                  <Link
+                    href={item.href}
+                    target={item.openInNewTab ? "_blank" : undefined}
+                    rel={item.openInNewTab ? "noopener noreferrer" : undefined}
+                    className="font-medium text-gray-700 transition-colors hover:text-shop_dark_green"
+                  >
+                    {item.title}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+
+            <div className="rounded-lg border border-shop_light_green/20 bg-shop_light_bg/45 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-shop_dark_green">
+                Newsletter
+              </p>
+              <p className="mt-1 text-sm text-lightColor">{settings.newsletterDescription}</p>
+              <Link
+                href="/#newsletter"
+                className="mt-3 inline-flex text-sm font-semibold text-shop_dark_green transition-colors hover:text-shop_btn_dark_green"
+              >
+                {settings.newsletterButtonLabel}
+              </Link>
+            </div>
           </div>
         </div>
 
-        <div className="py-5 border-t border-shop_light_green/20 text-center text-xs md:text-sm text-gray-600">
-          (c) {new Date().getFullYear()} ZAYNA. Tous droits reserves.
+        <div className="border-t border-shop_light_green/20 py-5 text-center text-xs text-gray-600 md:text-sm">
+          (c) {new Date().getFullYear()} {settings.footerCopyrightText}
         </div>
       </Container>
     </footer>
   );
-};
-
-export default Footer;
-
+}

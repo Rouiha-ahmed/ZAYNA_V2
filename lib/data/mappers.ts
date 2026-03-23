@@ -54,6 +54,10 @@ export const mapCategory = (category: {
   range: number | null;
   featured: boolean;
   imageUrl: string | null;
+  parentId?: string | null;
+  parent?: {
+    title: string;
+  } | null;
   _count?: {
     products: number;
   };
@@ -66,18 +70,30 @@ export const mapCategory = (category: {
   featured: category.featured,
   image: toImage(category.imageUrl, `${category.id}-image`),
   productCount: category._count?.products,
+  parentId: category.parentId || null,
+  parentTitle: category.parent?.title || null,
 });
 
 export const mapProduct = (product: {
   id: string;
   name: string;
   slug: string;
+  sku?: string;
+  barcode?: string | null;
+  shortDescription?: string | null;
+  fullDescription?: string | null;
   description: string | null;
   price: Prisma.Decimal | number;
+  regularPrice?: Prisma.Decimal | number | null;
+  salePrice?: Prisma.Decimal | number | null;
   discount: number;
   stock: number;
   status: string | null;
+  isActive?: boolean;
   isFeatured: boolean;
+  isBestSeller?: boolean;
+  isNewArrival?: boolean;
+  isPromotion?: boolean;
   brand?: {
     id: string;
     title: string;
@@ -95,22 +111,43 @@ export const mapProduct = (product: {
       title: string;
     };
   }>;
-}): Product => ({
-  _id: product.id,
-  name: product.name,
-  slug: { current: product.slug },
-  description: product.description,
-  price: decimalToNumber(product.price) ?? 0,
-  discount: product.discount,
-  stock: product.stock,
-  status: product.status as Product["status"],
-  isFeatured: product.isFeatured,
-  brand: product.brand ? mapBrand(product.brand) : null,
-  images: product.images
-    .map((image) => toImage(image.url, image.id, image.altText))
-    .filter((image): image is AppImage => Boolean(image)),
-  categories: product.categories.map((item) => item.category.title),
-});
+}): Product => {
+  const price = decimalToNumber(product.price) ?? 0;
+  const regularPrice = decimalToNumber(product.regularPrice) ?? price;
+  const salePrice = decimalToNumber(product.salePrice);
+  const derivedDiscount =
+    regularPrice > 0 && typeof salePrice === "number" && salePrice > 0 && salePrice < regularPrice
+      ? Math.round(((regularPrice - salePrice) / regularPrice) * 100)
+      : 0;
+
+  return {
+    _id: product.id,
+    name: product.name,
+    slug: { current: product.slug },
+    sku: product.sku,
+    barcode: product.barcode || null,
+    shortDescription: product.shortDescription || null,
+    fullDescription: product.fullDescription || null,
+    description:
+      product.description || product.shortDescription || product.fullDescription || null,
+    price,
+    regularPrice,
+    salePrice: typeof salePrice === "number" ? salePrice : null,
+    discount: product.discount > 0 ? product.discount : derivedDiscount,
+    stock: product.stock,
+    status: product.status as Product["status"],
+    isActive: typeof product.isActive === "boolean" ? product.isActive : true,
+    isFeatured: product.isFeatured,
+    isBestSeller: Boolean(product.isBestSeller),
+    isNewArrival: Boolean(product.isNewArrival),
+    isPromotion: Boolean(product.isPromotion),
+    brand: product.brand ? mapBrand(product.brand) : null,
+    images: product.images
+      .map((image) => toImage(image.url, image.id, image.altText))
+      .filter((image): image is AppImage => Boolean(image)),
+    categories: product.categories.map((item) => item.category.title),
+  };
+};
 
 export const mapAddress = (
   address: {

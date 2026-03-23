@@ -23,13 +23,15 @@ const moneyFormatter = new Intl.NumberFormat("fr-MA", {
 interface SearchBarProps {
   mode?: "all" | "desktop" | "mobile";
   onDesktopActiveChange?: (isActive: boolean) => void;
+  alwaysOpenDesktop?: boolean;
   className?: string;
 }
 
 const SearchBarFallback = ({
   mode = "all",
+  alwaysOpenDesktop = false,
   className,
-}: Pick<SearchBarProps, "mode" | "className">) => {
+}: Pick<SearchBarProps, "mode" | "alwaysOpenDesktop" | "className">) => {
   const showDesktopSearch = mode !== "mobile";
   const showMobileSearch = mode !== "desktop";
 
@@ -37,9 +39,16 @@ const SearchBarFallback = ({
     <>
       {showDesktopSearch ? (
         <div className={cn("relative hidden md:block", className)}>
-          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-shop_light_green/45 bg-white/85 text-lightColor shadow-[0_10px_24px_-24px_rgba(31,60,136,0.8)]">
-            <Search className="h-4.5 w-4.5" />
-          </div>
+          {alwaysOpenDesktop ? (
+            <div className="flex h-12 w-full items-center rounded-xl border border-shop_light_green/35 bg-white px-4 text-sm text-lightColor/80 shadow-[0_10px_20px_-18px_rgba(31,60,136,0.48)]">
+              <Search className="mr-2 h-4.5 w-4.5" />
+              Rechercher un produit...
+            </div>
+          ) : (
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-shop_light_green/45 bg-white/85 text-lightColor shadow-[0_10px_20px_-18px_rgba(31,60,136,0.6)]">
+              <Search className="h-4.5 w-4.5" />
+            </div>
+          )}
         </div>
       ) : null}
 
@@ -55,6 +64,7 @@ const SearchBarFallback = ({
 const SearchBarContent = ({
   mode = "all",
   onDesktopActiveChange,
+  alwaysOpenDesktop = false,
   className,
 }: SearchBarProps) => {
   const router = useRouter();
@@ -68,13 +78,21 @@ const SearchBarContent = ({
   const initialQuery = pathname === "/shop" ? searchParams?.get("q") || "" : "";
 
   const [query, setQuery] = useState(initialQuery);
-  const [isDesktopOpen, setIsDesktopOpen] = useState(!!initialQuery);
+  const [isDesktopOpen, setIsDesktopOpen] = useState(alwaysOpenDesktop || !!initialQuery);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isDesktopFocused, setIsDesktopFocused] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
   const showDesktopSearch = mode !== "mobile";
   const showMobileSearch = mode !== "desktop";
+
+  useEffect(() => {
+    if (!alwaysOpenDesktop) {
+      return;
+    }
+
+    setIsDesktopOpen(true);
+  }, [alwaysOpenDesktop]);
 
   useEffect(() => {
     if (!isDesktopOpen) return;
@@ -247,7 +265,7 @@ const SearchBarContent = ({
   const closeDesktopWhenEmpty = () => {
     window.setTimeout(() => {
       setIsDesktopFocused(false);
-      if (!trimmedQuery) setIsDesktopOpen(false);
+      if (!trimmedQuery && !alwaysOpenDesktop) setIsDesktopOpen(false);
     }, 120);
   };
 
@@ -347,14 +365,16 @@ const SearchBarContent = ({
         >
           <form
             onSubmit={onDesktopSubmit}
-            className={`group relative flex h-10 items-center overflow-hidden rounded-full border bg-white/85 backdrop-blur-md transition-[width,box-shadow,border-color,background-color] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-              isDesktopOpen
-                ? "w-64 xl:w-80 border-shop_dark_green/35 shadow-[0_14px_36px_-24px_rgba(31,60,136,0.85)]"
-                : "w-10 border-shop_light_green/45 shadow-[0_10px_24px_-24px_rgba(31,60,136,0.8)] hover:border-shop_light_green/80 hover:shadow-[0_12px_28px_-20px_rgba(77,182,198,0.8)]"
+            className={`group relative flex h-10 items-center overflow-hidden rounded-lg border bg-white/85 backdrop-blur-md transition-[width,box-shadow,border-color,background-color] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+              alwaysOpenDesktop
+                ? "h-12 w-full rounded-xl border-shop_light_green/35 px-1 shadow-[0_10px_20px_-16px_rgba(31,60,136,0.45)]"
+                : isDesktopOpen
+                  ? "w-64 xl:w-80 border-shop_dark_green/35 shadow-[0_12px_24px_-18px_rgba(31,60,136,0.65)]"
+                  : "w-10 border-shop_light_green/45 shadow-[0_10px_20px_-18px_rgba(31,60,136,0.6)] hover:border-shop_light_green/80 hover:shadow-[0_10px_20px_-16px_rgba(77,182,198,0.7)]"
             }`}
           >
             <button
-              type="button"
+              type={alwaysOpenDesktop ? "submit" : "button"}
               onClick={() => {
                 if (!isDesktopOpen) {
                   openDesktopSearch();
@@ -383,13 +403,17 @@ const SearchBarContent = ({
               }}
               placeholder="Rechercher un produit..."
               className={`h-full bg-transparent text-sm text-darkColor placeholder:text-lightColor/80 outline-none transition-[width,opacity,padding] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                isDesktopOpen ? "w-full pr-20 opacity-100" : "w-0 pr-0 opacity-0"
+                alwaysOpenDesktop
+                  ? "w-full px-1 pr-20 opacity-100"
+                  : isDesktopOpen
+                    ? "w-full pr-20 opacity-100"
+                    : "w-0 pr-0 opacity-0"
               }`}
             />
-            {isDesktopOpen ? (
+            {isDesktopOpen || alwaysOpenDesktop ? (
               <button
                 type="submit"
-                className={`absolute right-2 inline-flex h-7 w-7 items-center justify-center rounded-full border transition-all duration-300 ${
+                className={`absolute right-2 inline-flex h-7 w-7 items-center justify-center rounded-md border transition-all duration-300 ${
                   trimmedQuery
                     ? "border-shop_dark_green/30 bg-shop_dark_green text-white hover:bg-shop_btn_dark_green hover:translate-x-0.5"
                     : "border-shop_light_green/35 bg-white text-lightColor"
@@ -399,7 +423,7 @@ const SearchBarContent = ({
                 <ArrowRight className="h-3.5 w-3.5" />
               </button>
             ) : null}
-            {isDesktopOpen && query ? (
+            {(isDesktopOpen || alwaysOpenDesktop) && query ? (
               <button
                 type="button"
                 onClick={() => {
@@ -478,10 +502,17 @@ const SearchBarContent = ({
 };
 
 const SearchBar = (props: SearchBarProps) => (
-  <Suspense fallback={<SearchBarFallback mode={props.mode} className={props.className} />}>
+  <Suspense
+    fallback={
+      <SearchBarFallback
+        mode={props.mode}
+        alwaysOpenDesktop={props.alwaysOpenDesktop}
+        className={props.className}
+      />
+    }
+  >
     <SearchBarContent {...props} />
   </Suspense>
 );
 
 export default SearchBar;
-

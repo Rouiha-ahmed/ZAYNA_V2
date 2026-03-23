@@ -33,11 +33,11 @@ const ProductSideMenu = ({
   };
   return (
     <div
-      className={cn("absolute top-2 right-2 hover:cursor-pointer", className)}
+      className={cn("absolute right-2 top-2 hover:cursor-pointer", className)}
     >
       <div
         onClick={hasHydrated ? handleFavorite : undefined}
-        className={`p-2.5 rounded-full hover:bg-shop_dark_green/80 hover:text-white hoverEffect  ${existingProduct ? "bg-shop_dark_green/80 text-white" : "bg-lightColor/10"}`}
+        className={`rounded-full border border-shop_light_green/25 p-2 hover:bg-shop_dark_green hover:text-white hoverEffect ${existingProduct ? "bg-shop_dark_green text-white" : "bg-white/92 text-lightColor"}`}
       >
         <Heart size={15} />
       </div>
@@ -46,4 +46,3 @@ const ProductSideMenu = ({
 };
 
 export default ProductSideMenu;
-

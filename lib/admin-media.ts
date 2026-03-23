@@ -4,7 +4,7 @@ import path from "node:path";
 
 import sharp from "sharp";
 
-export type UploadDirectory = "brands" | "products" | "categories";
+export type UploadDirectory = "brands" | "products" | "categories" | "homepage";
 
 const IMAGE_ROOT = path.join(process.cwd(), "public", "static-assets");
 const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -27,6 +27,11 @@ const IMAGE_RULES: Record<
     maxWidth: 1600,
     maxHeight: 1600,
     thumbnailWidth: 420,
+  },
+  homepage: {
+    maxWidth: 1920,
+    maxHeight: 1280,
+    thumbnailWidth: 640,
   },
 };
 

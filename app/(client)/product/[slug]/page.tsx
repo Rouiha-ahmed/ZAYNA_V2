@@ -58,6 +58,8 @@ const SingleProductPage = async ({
           <PriceView
             price={product?.price}
             discount={product?.discount}
+            regularPrice={product?.regularPrice}
+            salePrice={product?.salePrice}
             className="text-lg font-bold"
           />
           <p
@@ -120,4 +122,3 @@ const SingleProductPage = async ({
 };
 
 export default SingleProductPage;
-

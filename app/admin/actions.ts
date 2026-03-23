@@ -1,6 +1,6 @@
 "use server";
 
-import { PaymentMethod, type ProductStatus } from "@prisma/client";
+import { PaymentMethod, SiteLinkGroup, type ProductStatus } from "@prisma/client";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma";
 
 type AdminSection =
   | "dashboard"
+  | "homepage"
   | "orders"
   | "products"
   | "categories"
@@ -35,6 +36,14 @@ const readText = (formData: FormData, key: string) => {
 const readOptionalText = (formData: FormData, key: string) => {
   const value = readText(formData, key);
   return value || null;
+};
+
+const requireTextField = (value: string, message: string) => {
+  if (!value) {
+    throw new Error(message);
+  }
+
+  return value;
 };
 
 const readBoolean = (formData: FormData, key: string) => formData.get(key) === "on";
@@ -124,6 +133,17 @@ const readStringList = (formData: FormData, key: string) =>
 const readUploadedFiles = (formData: FormData, key: string) =>
   formData.getAll(key).filter(isUploadedFile);
 
+const readSiteLinkGroup = (formData: FormData, key: string): SiteLinkGroup => {
+  const value = readText(formData, key);
+  const groups = new Set<SiteLinkGroup>(["header", "footer_quick", "footer_legal"]);
+
+  if (!groups.has(value as SiteLinkGroup)) {
+    throw new Error("Le groupe de lien selectionne est invalide.");
+  }
+
+  return value as SiteLinkGroup;
+};
+
 const slugify = (value: string) =>
   value
     .normalize("NFKD")
@@ -167,15 +187,17 @@ const adminRedirect = (
   const targetPath =
     section === "dashboard"
       ? "/admin"
-      : section === "orders"
-        ? "/admin/orders"
-        : section === "products"
-          ? "/admin/products"
-          : section === "categories"
-            ? "/admin/categories"
-            : section === "brands"
-              ? "/admin/brands"
-              : "/admin/promos";
+      : section === "homepage"
+        ? "/admin/homepage"
+        : section === "orders"
+          ? "/admin/orders"
+          : section === "products"
+            ? "/admin/products"
+            : section === "categories"
+              ? "/admin/categories"
+              : section === "brands"
+                ? "/admin/brands"
+                : "/admin/promos";
 
   redirect(`${targetPath}${query ? `?${query}` : ""}`);
 };
@@ -685,6 +707,10 @@ export async function createProductAction(formData: FormData) {
       getValidBrandRecord(brandId),
     ]);
     const slug = await generateUniqueSlug("product", name);
+    const regularPrice =
+      discount > 0 ? Number((price + (discount * price) / 100).toFixed(2)) : price;
+    const salePrice = discount > 0 ? price : null;
+    const sku = slug.toUpperCase();
     let uploadedImages: UploadedAsset[] = [];
 
     try {
@@ -697,8 +723,11 @@ export async function createProductAction(formData: FormData) {
           data: {
             name,
             slug,
+            sku,
             description,
             price,
+            regularPrice,
+            salePrice,
             discount,
             stock,
             status: deriveProductStatus(discount, isFeatured),
@@ -812,6 +841,9 @@ export async function updateProductAction(formData: FormData) {
       getValidCategoryRecords(categoryIds),
       getValidBrandRecord(brandId),
     ]);
+    const regularPrice =
+      discount > 0 ? Number((price + (discount * price) / 100).toFixed(2)) : price;
+    const salePrice = discount > 0 ? price : null;
 
     let uploadedImages: UploadedAsset[] = [];
 
@@ -831,6 +863,8 @@ export async function updateProductAction(formData: FormData) {
             name,
             description,
             price,
+            regularPrice,
+            salePrice,
             discount,
             stock,
             status: deriveProductStatus(discount, isFeatured),
@@ -1052,6 +1086,640 @@ export async function deletePromoCodeAction(formData: FormData) {
     refreshStorefront();
     adminRedirect("promos", {
       status: "Code promo supprime.",
+    });
+  });
+}
+
+export async function updateStorefrontSettingsAction(formData: FormData) {
+  return withAction("homepage", "Impossible de mettre a jour les reglages homepage.", async () => {
+    const announcementText = requireTextField(
+      readText(formData, "announcementText"),
+      "Le texte de la barre d'annonce est obligatoire."
+    );
+    const featuredCategoriesTitle = requireTextField(
+      readText(formData, "featuredCategoriesTitle"),
+      "Le titre de la section categories est obligatoire."
+    );
+    const promotionsTitle = requireTextField(
+      readText(formData, "promotionsTitle"),
+      "Le titre de la section promotions est obligatoire."
+    );
+    const bestSellersTitle = requireTextField(
+      readText(formData, "bestSellersTitle"),
+      "Le titre de la section meilleures ventes est obligatoire."
+    );
+    const newArrivalsTitle = requireTextField(
+      readText(formData, "newArrivalsTitle"),
+      "Le titre de la section nouveautes est obligatoire."
+    );
+    const brandsTitle = requireTextField(
+      readText(formData, "brandsTitle"),
+      "Le titre de la section marques est obligatoire."
+    );
+    const trustTitle = requireTextField(
+      readText(formData, "trustTitle"),
+      "Le titre de la section confiance est obligatoire."
+    );
+    const loyaltyTitle = requireTextField(
+      readText(formData, "loyaltyTitle"),
+      "Le titre de la section fidelite est obligatoire."
+    );
+    const loyaltyDescription = requireTextField(
+      readText(formData, "loyaltyDescription"),
+      "La description de la section fidelite est obligatoire."
+    );
+    const loyaltyCtaLabel = requireTextField(
+      readText(formData, "loyaltyCtaLabel"),
+      "Le libelle du bouton fidelite est obligatoire."
+    );
+    const loyaltyCtaHref = requireTextField(
+      readText(formData, "loyaltyCtaHref"),
+      "Le lien du bouton fidelite est obligatoire."
+    );
+    const newsletterTitle = requireTextField(
+      readText(formData, "newsletterTitle"),
+      "Le titre newsletter est obligatoire."
+    );
+    const newsletterDescription = requireTextField(
+      readText(formData, "newsletterDescription"),
+      "La description newsletter est obligatoire."
+    );
+    const newsletterPlaceholder = requireTextField(
+      readText(formData, "newsletterPlaceholder"),
+      "Le placeholder newsletter est obligatoire."
+    );
+    const newsletterButtonLabel = requireTextField(
+      readText(formData, "newsletterButtonLabel"),
+      "Le bouton newsletter est obligatoire."
+    );
+    const newsletterSuccessMessage = requireTextField(
+      readText(formData, "newsletterSuccessMessage"),
+      "Le message de succes newsletter est obligatoire."
+    );
+    const newsletterErrorMessage = requireTextField(
+      readText(formData, "newsletterErrorMessage"),
+      "Le message d'erreur newsletter est obligatoire."
+    );
+    const footerAboutTitle = requireTextField(
+      readText(formData, "footerAboutTitle"),
+      "Le titre du bloc a propos est obligatoire."
+    );
+    const footerAboutDescription = requireTextField(
+      readText(formData, "footerAboutDescription"),
+      "La description du bloc a propos est obligatoire."
+    );
+    const footerQuickLinksTitle = requireTextField(
+      readText(formData, "footerQuickLinksTitle"),
+      "Le titre des liens rapides est obligatoire."
+    );
+    const footerLegalLinksTitle = requireTextField(
+      readText(formData, "footerLegalLinksTitle"),
+      "Le titre des liens legaux est obligatoire."
+    );
+    const footerCategoriesTitle = requireTextField(
+      readText(formData, "footerCategoriesTitle"),
+      "Le titre des categories footer est obligatoire."
+    );
+    const footerCopyrightText = requireTextField(
+      readText(formData, "footerCopyrightText"),
+      "Le texte copyright est obligatoire."
+    );
+
+    await prisma.storefrontSettings.upsert({
+      where: {
+        id: "default",
+      },
+      update: {
+        announcementEnabled: readBoolean(formData, "announcementEnabled"),
+        announcementText,
+        announcementHref: readOptionalText(formData, "announcementHref"),
+        heroAutoplayMs: readInteger(formData, "heroAutoplayMs", {
+          min: 2000,
+          max: 15000,
+          defaultValue: 5000,
+        }),
+        featuredCategoriesTitle,
+        featuredCategoriesSubtitle: readText(formData, "featuredCategoriesSubtitle"),
+        promotionsTitle,
+        promotionsSubtitle: readText(formData, "promotionsSubtitle"),
+        bestSellersTitle,
+        bestSellersSubtitle: readText(formData, "bestSellersSubtitle"),
+        newArrivalsTitle,
+        newArrivalsSubtitle: readText(formData, "newArrivalsSubtitle"),
+        brandsTitle,
+        brandsSubtitle: readText(formData, "brandsSubtitle"),
+        trustTitle,
+        trustSubtitle: readText(formData, "trustSubtitle"),
+        loyaltyBadge: readText(formData, "loyaltyBadge"),
+        loyaltyTitle,
+        loyaltyDescription,
+        loyaltyCtaLabel,
+        loyaltyCtaHref,
+        loyaltyHighlightText: readText(formData, "loyaltyHighlightText"),
+        loyaltyImageUrl: readOptionalText(formData, "loyaltyImageUrl"),
+        newsletterTitle,
+        newsletterDescription,
+        newsletterPlaceholder,
+        newsletterButtonLabel,
+        newsletterSuccessMessage,
+        newsletterErrorMessage,
+        footerAboutTitle,
+        footerAboutDescription,
+        footerQuickLinksTitle,
+        footerLegalLinksTitle,
+        footerCategoriesTitle,
+        footerContactPhone: readOptionalText(formData, "footerContactPhone"),
+        footerContactEmail: readOptionalText(formData, "footerContactEmail"),
+        footerContactHours: readOptionalText(formData, "footerContactHours"),
+        footerCopyrightText,
+        featuredCategoriesLimit: readInteger(formData, "featuredCategoriesLimit", {
+          min: 1,
+          max: 16,
+          defaultValue: 8,
+        }),
+        promotionsLimit: readInteger(formData, "promotionsLimit", {
+          min: 1,
+          max: 24,
+          defaultValue: 10,
+        }),
+        bestSellersLimit: readInteger(formData, "bestSellersLimit", {
+          min: 1,
+          max: 24,
+          defaultValue: 10,
+        }),
+        newArrivalsLimit: readInteger(formData, "newArrivalsLimit", {
+          min: 1,
+          max: 24,
+          defaultValue: 10,
+        }),
+        brandsLimit: readInteger(formData, "brandsLimit", {
+          min: 1,
+          max: 18,
+          defaultValue: 12,
+        }),
+      },
+      create: {
+        id: "default",
+        announcementEnabled: readBoolean(formData, "announcementEnabled"),
+        announcementText,
+        announcementHref: readOptionalText(formData, "announcementHref"),
+        heroAutoplayMs: readInteger(formData, "heroAutoplayMs", {
+          min: 2000,
+          max: 15000,
+          defaultValue: 5000,
+        }),
+        featuredCategoriesTitle,
+        featuredCategoriesSubtitle: readText(formData, "featuredCategoriesSubtitle"),
+        promotionsTitle,
+        promotionsSubtitle: readText(formData, "promotionsSubtitle"),
+        bestSellersTitle,
+        bestSellersSubtitle: readText(formData, "bestSellersSubtitle"),
+        newArrivalsTitle,
+        newArrivalsSubtitle: readText(formData, "newArrivalsSubtitle"),
+        brandsTitle,
+        brandsSubtitle: readText(formData, "brandsSubtitle"),
+        trustTitle,
+        trustSubtitle: readText(formData, "trustSubtitle"),
+        loyaltyBadge: readText(formData, "loyaltyBadge"),
+        loyaltyTitle,
+        loyaltyDescription,
+        loyaltyCtaLabel,
+        loyaltyCtaHref,
+        loyaltyHighlightText: readText(formData, "loyaltyHighlightText"),
+        loyaltyImageUrl: readOptionalText(formData, "loyaltyImageUrl"),
+        newsletterTitle,
+        newsletterDescription,
+        newsletterPlaceholder,
+        newsletterButtonLabel,
+        newsletterSuccessMessage,
+        newsletterErrorMessage,
+        footerAboutTitle,
+        footerAboutDescription,
+        footerQuickLinksTitle,
+        footerLegalLinksTitle,
+        footerCategoriesTitle,
+        footerContactPhone: readOptionalText(formData, "footerContactPhone"),
+        footerContactEmail: readOptionalText(formData, "footerContactEmail"),
+        footerContactHours: readOptionalText(formData, "footerContactHours"),
+        footerCopyrightText,
+        featuredCategoriesLimit: readInteger(formData, "featuredCategoriesLimit", {
+          min: 1,
+          max: 16,
+          defaultValue: 8,
+        }),
+        promotionsLimit: readInteger(formData, "promotionsLimit", {
+          min: 1,
+          max: 24,
+          defaultValue: 10,
+        }),
+        bestSellersLimit: readInteger(formData, "bestSellersLimit", {
+          min: 1,
+          max: 24,
+          defaultValue: 10,
+        }),
+        newArrivalsLimit: readInteger(formData, "newArrivalsLimit", {
+          min: 1,
+          max: 24,
+          defaultValue: 10,
+        }),
+        brandsLimit: readInteger(formData, "brandsLimit", {
+          min: 1,
+          max: 18,
+          defaultValue: 12,
+        }),
+      },
+    });
+
+    refreshStorefront();
+    adminRedirect("homepage", {
+      status: "Reglages homepage mis a jour.",
+    });
+  });
+}
+
+export async function createHomeHeroSlideAction(formData: FormData) {
+  return withAction("homepage", "Impossible d'ajouter ce slide hero.", async () => {
+    const title = requireTextField(readText(formData, "title"), "Le titre du slide est obligatoire.");
+    const imageFile = formData.get("imageFile");
+    const imageUrlInput = readOptionalText(formData, "imageUrl");
+    let uploadedImage: UploadedAsset | null = null;
+
+    try {
+      if (isUploadedFile(imageFile)) {
+        uploadedImage = await saveOptimizedImage(imageFile, "homepage", title);
+      }
+
+      await prisma.homeHeroSlide.create({
+        data: {
+          badge: readOptionalText(formData, "badge"),
+          title,
+          subtitle: readOptionalText(formData, "subtitle"),
+          ctaLabel: readOptionalText(formData, "ctaLabel"),
+          ctaHref: readOptionalText(formData, "ctaHref"),
+          imageUrl: uploadedImage?.url || imageUrlInput,
+          altText: readOptionalText(formData, "altText"),
+          sortOrder: readInteger(formData, "sortOrder", {
+            min: 0,
+            max: 200,
+            defaultValue: 0,
+          }),
+          isActive: readBoolean(formData, "isActive"),
+        },
+      });
+    } catch (error) {
+      if (uploadedImage?.url) {
+        await deleteStoredAsset(uploadedImage.url);
+      }
+      throw error;
+    }
+
+    refreshStorefront();
+    adminRedirect("homepage", {
+      status: "Slide hero ajoute.",
+    });
+  });
+}
+
+export async function updateHomeHeroSlideAction(formData: FormData) {
+  return withAction("homepage", "Impossible de modifier ce slide hero.", async () => {
+    const id = requireId(readText(formData, "id"), "Slide hero introuvable.");
+    const title = requireTextField(readText(formData, "title"), "Le titre du slide est obligatoire.");
+    const imageFile = formData.get("imageFile");
+    const imageUrlInput = readOptionalText(formData, "imageUrl");
+    const removeImage = readBoolean(formData, "removeImage");
+
+    const existing = await prisma.homeHeroSlide.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        imageUrl: true,
+      },
+    });
+
+    if (!existing) {
+      throw new Error("Ce slide hero n'existe plus.");
+    }
+
+    let uploadedImage: UploadedAsset | null = null;
+    let nextImageUrl = existing.imageUrl;
+
+    try {
+      if (isUploadedFile(imageFile)) {
+        uploadedImage = await saveOptimizedImage(imageFile, "homepage", title);
+      }
+
+      if (removeImage) {
+        nextImageUrl = null;
+      }
+
+      if (imageUrlInput !== null) {
+        nextImageUrl = imageUrlInput;
+      }
+
+      if (uploadedImage?.url) {
+        nextImageUrl = uploadedImage.url;
+      }
+
+      await prisma.homeHeroSlide.update({
+        where: {
+          id,
+        },
+        data: {
+          badge: readOptionalText(formData, "badge"),
+          title,
+          subtitle: readOptionalText(formData, "subtitle"),
+          ctaLabel: readOptionalText(formData, "ctaLabel"),
+          ctaHref: readOptionalText(formData, "ctaHref"),
+          imageUrl: nextImageUrl,
+          altText: readOptionalText(formData, "altText"),
+          sortOrder: readInteger(formData, "sortOrder", {
+            min: 0,
+            max: 200,
+            defaultValue: 0,
+          }),
+          isActive: readBoolean(formData, "isActive"),
+        },
+      });
+    } catch (error) {
+      if (uploadedImage?.url) {
+        await deleteStoredAsset(uploadedImage.url);
+      }
+      throw error;
+    }
+
+    if (existing.imageUrl && existing.imageUrl !== nextImageUrl) {
+      await deleteStoredAsset(existing.imageUrl);
+    }
+
+    refreshStorefront();
+    adminRedirect("homepage", {
+      status: "Slide hero mis a jour.",
+    });
+  });
+}
+
+export async function deleteHomeHeroSlideAction(formData: FormData) {
+  return withAction("homepage", "Impossible de supprimer ce slide hero.", async () => {
+    const id = requireId(readText(formData, "id"), "Slide hero introuvable.");
+    const existing = await prisma.homeHeroSlide.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        imageUrl: true,
+      },
+    });
+
+    if (!existing) {
+      throw new Error("Ce slide hero n'existe plus.");
+    }
+
+    await prisma.homeHeroSlide.delete({
+      where: {
+        id,
+      },
+    });
+
+    await deleteStoredAsset(existing.imageUrl);
+    refreshStorefront();
+    adminRedirect("homepage", {
+      status: "Slide hero supprime.",
+    });
+  });
+}
+
+export async function createHomeTrustItemAction(formData: FormData) {
+  return withAction("homepage", "Impossible d'ajouter ce bloc de confiance.", async () => {
+    const title = requireTextField(readText(formData, "title"), "Le titre est obligatoire.");
+    const description = requireTextField(
+      readText(formData, "description"),
+      "La description est obligatoire."
+    );
+    const icon = requireTextField(readText(formData, "icon"), "L'icone est obligatoire.");
+
+    await prisma.homeTrustItem.create({
+      data: {
+        title,
+        description,
+        icon,
+        sortOrder: readInteger(formData, "sortOrder", {
+          min: 0,
+          max: 200,
+          defaultValue: 0,
+        }),
+        isActive: readBoolean(formData, "isActive"),
+      },
+    });
+
+    refreshStorefront();
+    adminRedirect("homepage", {
+      status: "Bloc de confiance ajoute.",
+    });
+  });
+}
+
+export async function updateHomeTrustItemAction(formData: FormData) {
+  return withAction("homepage", "Impossible de modifier ce bloc de confiance.", async () => {
+    const id = requireId(readText(formData, "id"), "Bloc de confiance introuvable.");
+    const title = requireTextField(readText(formData, "title"), "Le titre est obligatoire.");
+    const description = requireTextField(
+      readText(formData, "description"),
+      "La description est obligatoire."
+    );
+    const icon = requireTextField(readText(formData, "icon"), "L'icone est obligatoire.");
+
+    await prisma.homeTrustItem.update({
+      where: {
+        id,
+      },
+      data: {
+        title,
+        description,
+        icon,
+        sortOrder: readInteger(formData, "sortOrder", {
+          min: 0,
+          max: 200,
+          defaultValue: 0,
+        }),
+        isActive: readBoolean(formData, "isActive"),
+      },
+    });
+
+    refreshStorefront();
+    adminRedirect("homepage", {
+      status: "Bloc de confiance mis a jour.",
+    });
+  });
+}
+
+export async function deleteHomeTrustItemAction(formData: FormData) {
+  return withAction("homepage", "Impossible de supprimer ce bloc de confiance.", async () => {
+    const id = requireId(readText(formData, "id"), "Bloc de confiance introuvable.");
+
+    await prisma.homeTrustItem.delete({
+      where: {
+        id,
+      },
+    });
+
+    refreshStorefront();
+    adminRedirect("homepage", {
+      status: "Bloc de confiance supprime.",
+    });
+  });
+}
+
+export async function createSiteLinkAction(formData: FormData) {
+  return withAction("homepage", "Impossible d'ajouter ce lien.", async () => {
+    const title = requireTextField(readText(formData, "title"), "Le titre du lien est obligatoire.");
+    const href = requireTextField(readText(formData, "href"), "L'URL du lien est obligatoire.");
+
+    await prisma.siteLink.create({
+      data: {
+        group: readSiteLinkGroup(formData, "group"),
+        title,
+        href,
+        sortOrder: readInteger(formData, "sortOrder", {
+          min: 0,
+          max: 200,
+          defaultValue: 0,
+        }),
+        openInNewTab: readBoolean(formData, "openInNewTab"),
+      },
+    });
+
+    refreshStorefront();
+    adminRedirect("homepage", {
+      status: "Lien ajoute.",
+    });
+  });
+}
+
+export async function updateSiteLinkAction(formData: FormData) {
+  return withAction("homepage", "Impossible de modifier ce lien.", async () => {
+    const id = requireId(readText(formData, "id"), "Lien introuvable.");
+    const title = requireTextField(readText(formData, "title"), "Le titre du lien est obligatoire.");
+    const href = requireTextField(readText(formData, "href"), "L'URL du lien est obligatoire.");
+
+    await prisma.siteLink.update({
+      where: {
+        id,
+      },
+      data: {
+        group: readSiteLinkGroup(formData, "group"),
+        title,
+        href,
+        sortOrder: readInteger(formData, "sortOrder", {
+          min: 0,
+          max: 200,
+          defaultValue: 0,
+        }),
+        openInNewTab: readBoolean(formData, "openInNewTab"),
+      },
+    });
+
+    refreshStorefront();
+    adminRedirect("homepage", {
+      status: "Lien mis a jour.",
+    });
+  });
+}
+
+export async function deleteSiteLinkAction(formData: FormData) {
+  return withAction("homepage", "Impossible de supprimer ce lien.", async () => {
+    const id = requireId(readText(formData, "id"), "Lien introuvable.");
+
+    await prisma.siteLink.delete({
+      where: {
+        id,
+      },
+    });
+
+    refreshStorefront();
+    adminRedirect("homepage", {
+      status: "Lien supprime.",
+    });
+  });
+}
+
+export async function createSiteSocialLinkAction(formData: FormData) {
+  return withAction("homepage", "Impossible d'ajouter ce reseau social.", async () => {
+    const platform = requireTextField(
+      readText(formData, "platform"),
+      "La plateforme est obligatoire."
+    );
+    const title = requireTextField(readText(formData, "title"), "Le titre est obligatoire.");
+    const href = requireTextField(readText(formData, "href"), "L'URL est obligatoire.");
+
+    await prisma.siteSocialLink.create({
+      data: {
+        platform,
+        title,
+        href,
+        sortOrder: readInteger(formData, "sortOrder", {
+          min: 0,
+          max: 200,
+          defaultValue: 0,
+        }),
+        openInNewTab: readBoolean(formData, "openInNewTab"),
+      },
+    });
+
+    refreshStorefront();
+    adminRedirect("homepage", {
+      status: "Reseau social ajoute.",
+    });
+  });
+}
+
+export async function updateSiteSocialLinkAction(formData: FormData) {
+  return withAction("homepage", "Impossible de modifier ce reseau social.", async () => {
+    const id = requireId(readText(formData, "id"), "Reseau social introuvable.");
+    const platform = requireTextField(
+      readText(formData, "platform"),
+      "La plateforme est obligatoire."
+    );
+    const title = requireTextField(readText(formData, "title"), "Le titre est obligatoire.");
+    const href = requireTextField(readText(formData, "href"), "L'URL est obligatoire.");
+
+    await prisma.siteSocialLink.update({
+      where: {
+        id,
+      },
+      data: {
+        platform,
+        title,
+        href,
+        sortOrder: readInteger(formData, "sortOrder", {
+          min: 0,
+          max: 200,
+          defaultValue: 0,
+        }),
+        openInNewTab: readBoolean(formData, "openInNewTab"),
+      },
+    });
+
+    refreshStorefront();
+    adminRedirect("homepage", {
+      status: "Reseau social mis a jour.",
+    });
+  });
+}
+
+export async function deleteSiteSocialLinkAction(formData: FormData) {
+  return withAction("homepage", "Impossible de supprimer ce reseau social.", async () => {
+    const id = requireId(readText(formData, "id"), "Reseau social introuvable.");
+
+    await prisma.siteSocialLink.delete({
+      where: {
+        id,
+      },
+    });
+
+    refreshStorefront();
+    adminRedirect("homepage", {
+      status: "Reseau social supprime.",
     });
   });
 }

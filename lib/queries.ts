@@ -5,16 +5,42 @@ import { mapBrand, mapCategory, mapOrder, mapProduct } from "@/lib/data/mappers"
 import { prisma } from "@/lib/prisma";
 import type { BRANDS_QUERYResult, Category, Product } from "@/types";
 
-const productInclude = {
+const productSelect = {
+  id: true,
+  name: true,
+  slug: true,
+  description: true,
+  price: true,
+  discount: true,
+  stock: true,
+  status: true,
+  isFeatured: true,
   images: {
     orderBy: {
       sortOrder: "asc" as const,
     },
+    select: {
+      id: true,
+      url: true,
+      altText: true,
+    },
   },
-  brand: true,
+  brand: {
+    select: {
+      id: true,
+      title: true,
+      slug: true,
+      description: true,
+      imageUrl: true,
+    },
+  },
   categories: {
     include: {
-      category: true,
+      category: {
+        select: {
+          title: true,
+        },
+      },
     },
   },
 };
@@ -59,7 +85,14 @@ const getCachedCategories = unstable_cache(
         title: "asc",
       },
       take: quantity,
-      include: {
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        description: true,
+        range: true,
+        featured: true,
+        imageUrl: true,
         _count: {
           select: {
             products: true,
@@ -123,6 +156,13 @@ const getCachedAllBrands = unstable_cache(
       orderBy: {
         title: "asc",
       },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        description: true,
+        imageUrl: true,
+      },
     });
 
     return brands.map(mapBrand);
@@ -140,7 +180,7 @@ const getCachedDealProducts = unstable_cache(
       orderBy: {
         name: "asc",
       },
-      include: productInclude,
+      select: productSelect,
     });
 
     return products.map(mapProduct);
@@ -155,7 +195,7 @@ const getCachedProductBySlug = unstable_cache(
       where: {
         slug,
       },
-      include: productInclude,
+      select: productSelect,
     });
 
     return product ? mapProduct(product) : null;
@@ -255,7 +295,7 @@ const getCachedSearchProducts = unstable_cache(
         name: "asc",
       },
       take: input.limit || undefined,
-      include: productInclude,
+      select: productSelect,
     });
 
     return products.map(mapProduct);
