@@ -807,14 +807,15 @@ export async function updateProductAction(formData: FormData) {
       where: {
         id,
       },
-      include: {
+      select: {
+        slug: true,
         brand: {
           select: {
             slug: true,
           },
         },
         categories: {
-          include: {
+          select: {
             category: {
               select: {
                 slug: true,
@@ -870,6 +871,9 @@ export async function updateProductAction(formData: FormData) {
             status: deriveProductStatus(discount, isFeatured),
             isFeatured,
             brandId: brand?.id || null,
+          },
+          select: {
+            id: true,
           },
         });
 
@@ -935,14 +939,15 @@ export async function deleteProductAction(formData: FormData) {
       where: {
         id,
       },
-      include: {
+      select: {
+        slug: true,
         brand: {
           select: {
             slug: true,
           },
         },
         categories: {
-          include: {
+          select: {
             category: {
               select: {
                 slug: true,
@@ -965,6 +970,9 @@ export async function deleteProductAction(formData: FormData) {
     await prisma.product.delete({
       where: {
         id,
+      },
+      select: {
+        id: true,
       },
     });
 

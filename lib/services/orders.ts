@@ -176,6 +176,9 @@ export async function createManualOrderRecord(input: CreateManualOrderInput) {
         data: {
           stock: product.stock - requestedQty,
         },
+        select: {
+          id: true,
+        },
       });
     }
 
@@ -334,6 +337,9 @@ export async function createOrderFromStripeSession(
         },
         data: {
           stock: Math.max(product.stock - quantity, 0),
+        },
+        select: {
+          id: true,
         },
       });
     }
