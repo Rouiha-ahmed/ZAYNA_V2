@@ -58,7 +58,7 @@ export default async function Header() {
           </div>
         </Container>
 
-        <div className="hidden border-t border-shop_light_green/15 bg-[#1F3C88] lg:block">
+        <div className="hidden border-t border-shop_light_green/15 bg-[#3870C8] lg:block">
           <Container className="py-2">
             <HeaderMenu links={shell.headerLinks} categories={shell.navigationCategories} />
           </Container>
