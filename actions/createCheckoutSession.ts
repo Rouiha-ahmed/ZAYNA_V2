@@ -30,6 +30,22 @@ export interface GroupedCartItems {
   quantity: number;
 }
 
+const checkoutProductSelect = {
+  id: true,
+  name: true,
+  description: true,
+  price: true,
+  stock: true,
+  images: {
+    orderBy: {
+      sortOrder: "asc" as const,
+    },
+    select: {
+      url: true,
+    },
+  },
+};
+
 export async function createCheckoutSession(
   items: GroupedCartItems[],
   metadata: Metadata
@@ -77,13 +93,7 @@ export async function createCheckoutSession(
           in: [...quantityByProductId.keys()],
         },
       },
-      include: {
-        images: {
-          orderBy: {
-            sortOrder: "asc",
-          },
-        },
-      },
+      select: checkoutProductSelect,
     });
     const productById = new Map(products.map((product) => [product.id, product]));
     const normalizedItems = [...quantityByProductId.entries()].map(
@@ -224,4 +234,3 @@ export async function createCheckoutSession(
     throw error;
   }
 }
-

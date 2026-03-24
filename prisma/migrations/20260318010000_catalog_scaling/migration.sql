@@ -24,7 +24,7 @@ SET "regularPrice" = "price"
 WHERE "regularPrice" IS NULL;
 
 UPDATE "Product"
-SET "sku" = CONCAT('SKU-', SUBSTRING("id" FROM 1 FOR 8))
+SET "sku" = UPPER("slug")
 WHERE "sku" IS NULL;
 
 ALTER TABLE "Product" ALTER COLUMN "regularPrice" SET NOT NULL;

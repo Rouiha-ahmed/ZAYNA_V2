@@ -24,6 +24,21 @@ type CreateManualOrderInput = {
   identity: AppUserIdentity;
 };
 
+const orderProductSelect = {
+  id: true,
+  name: true,
+  price: true,
+  stock: true,
+  images: {
+    orderBy: {
+      sortOrder: "asc" as const,
+    },
+    select: {
+      url: true,
+    },
+  },
+};
+
 const normalizeInstallmentMonths = (value?: number | null) =>
   value === 6 || value === 12 ? value : 3;
 
@@ -81,16 +96,7 @@ export async function createManualOrderRecord(input: CreateManualOrderInput) {
         in: productIds,
       },
     },
-    include: {
-      images: {
-        orderBy: {
-          sortOrder: "asc",
-        },
-        select: {
-          url: true,
-        },
-      },
-    },
+    select: orderProductSelect,
   });
 
   const productById = new Map(products.map((product) => [product.id, product]));
@@ -134,16 +140,7 @@ export async function createManualOrderRecord(input: CreateManualOrderInput) {
           in: productIds,
         },
       },
-      include: {
-        images: {
-          orderBy: {
-            sortOrder: "asc",
-          },
-          select: {
-            url: true,
-          },
-        },
-      },
+      select: orderProductSelect,
     });
     const liveProductById = new Map(
       liveProducts.map((product) => [product.id, product])
@@ -319,16 +316,7 @@ export async function createOrderFromStripeSession(
           in: productIds,
         },
       },
-      include: {
-        images: {
-          orderBy: {
-            sortOrder: "asc",
-          },
-          select: {
-            url: true,
-          },
-        },
-      },
+      select: orderProductSelect,
     });
     const productById = new Map(products.map((product) => [product.id, product]));
 
