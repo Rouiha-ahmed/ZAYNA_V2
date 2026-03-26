@@ -14,12 +14,15 @@
     "db:deploy": "prisma migrate deploy",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "db:backfill:homepage": "tsx prisma/backfill-homepage-sections.ts",
+    "import:heypara": "tsx scripts/import-heypara.ts",
     "db:setup": "npm run db:generate && npm run db:migrate && npm run db:seed",
     "db:studio": "prisma studio"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.38.0",
     "@prisma/client": "^6.6.0",
+    "@tailwindcss/oxide-darwin-x64": "^4.1.18",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

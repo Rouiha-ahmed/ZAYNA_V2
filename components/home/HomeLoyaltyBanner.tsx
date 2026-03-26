@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 
-import { resolveImageUrl } from "@/lib/image";
+import { sanitizePublicImageUrl } from "@/lib/image";
 
 type HomeLoyaltyBannerProps = {
   badge: string;
@@ -22,7 +22,10 @@ export default function HomeLoyaltyBanner({
   highlightText,
   imageUrl,
 }: HomeLoyaltyBannerProps) {
-  const resolvedImageUrl = resolveImageUrl(imageUrl || "");
+  const resolvedImageUrl = sanitizePublicImageUrl(
+    imageUrl,
+    "/carte-fideliteEEEEE.png"
+  );
 
   return (
     <section className="relative overflow-hidden rounded-[16px] border border-shop_light_green/22 bg-white shadow-[0_24px_46px_-40px_rgba(22,46,110,0.5)]">

@@ -23,6 +23,7 @@ import {
   updateStorefrontSettingsAction,
 } from "@/app/admin/actions";
 import AdminDeleteButton from "@/components/admin/AdminDeleteButton";
+import HomepageProductSectionsAdminList from "@/components/admin/homepage/HomepageProductSectionsAdminList";
 import {
   AdminPageHero,
   EmptyState,
@@ -37,6 +38,7 @@ import ImageDropInput from "@/components/admin/ImageDropInput";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { getAdminHomepageProductSectionsData } from "@/lib/admin-homepage-product-sections";
 import { getAdminHomepagePageData } from "@/lib/admin-pages";
 import { resolveImageUrl } from "@/lib/image";
 import { cn } from "@/lib/utils";
@@ -64,9 +66,10 @@ export default async function AdminHomepagePage({
 }: {
   searchParams: SearchParams;
 }) {
-  const [resolvedSearchParams, data] = await Promise.all([
+  const [resolvedSearchParams, data, homepageProductSectionsData] = await Promise.all([
     searchParams,
     getAdminHomepagePageData(),
+    getAdminHomepageProductSectionsData(),
   ]);
   const statusMessage = getQueryValue(resolvedSearchParams, "status");
   const errorMessage = getQueryValue(resolvedSearchParams, "error");
@@ -106,6 +109,8 @@ export default async function AdminHomepagePage({
           {errorMessage}
         </div>
       ) : null}
+
+      <HomepageProductSectionsAdminList data={homepageProductSectionsData} />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <MetricCard

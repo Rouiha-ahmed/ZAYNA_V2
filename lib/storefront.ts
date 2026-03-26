@@ -3,7 +3,14 @@ import { unstable_cache } from "next/cache";
 
 import { getAdminDataTag } from "@/lib/admin";
 import { mapBrand, mapCategory, mapProduct } from "@/lib/data/mappers";
+import { type HomepageDynamicSection } from "@/lib/homepage-sections";
+import { sanitizePublicImageUrl } from "@/lib/image";
 import { prisma } from "@/lib/prisma";
+import { buildDynamicHomepageSections } from "@/lib/storefront-homepage-builder";
+import {
+  getStorefrontCustomHomepageProductSections,
+  type StorefrontCustomHomepageProductSection,
+} from "@/lib/storefront-homepage-product-sections";
 import type { BRANDS_QUERYResult, Category, Product } from "@/types";
 
 const adminDataTag = getAdminDataTag();
@@ -204,6 +211,12 @@ const storefrontSchemaEntities = [
   "SiteLink",
   "SiteSocialLink",
   "NewsletterSubscription",
+  "HomepageSection",
+  "HomepageSectionProduct",
+  "HomepageProductSection",
+  "HomepageProductSectionItem",
+  "Tag",
+  "ProductTag",
   "Category",
   "Brand",
   "Product",
@@ -329,6 +342,9 @@ export type StorefrontHomeData = StorefrontShellData & {
   newArrivalProducts: Product[];
   brands: BRANDS_QUERYResult;
   trustItems: StorefrontTrustItem[];
+  dynamicSections: HomepageDynamicSection[];
+  hasDynamicSections: boolean;
+  customProductSections: StorefrontCustomHomepageProductSection[];
   hasError: boolean;
 };
 
@@ -395,6 +411,10 @@ const normalizeSettings = (
 ): StorefrontSettingsContent => ({
   ...DEFAULT_SETTINGS,
   ...(settings || {}),
+  loyaltyImageUrl: sanitizePublicImageUrl(
+    settings?.loyaltyImageUrl,
+    DEFAULT_SETTINGS.loyaltyImageUrl || ""
+  ),
   featuredCategoriesLimit: clampLimit(
     settings?.featuredCategoriesLimit,
     DEFAULT_SETTINGS.featuredCategoriesLimit,
@@ -694,6 +714,60 @@ const fetchStorefrontHomeData = async (): Promise<StorefrontHomeData> => {
           .filter((category) => (category.productCount || 0) > 0)
           .slice(0, settings.featuredCategoriesLimit);
 
+  let dynamicSections: HomepageDynamicSection[] = [];
+  try {
+    dynamicSections = await buildDynamicHomepageSections({
+      shell: {
+        headerLinks: shell.headerLinks,
+        footerQuickLinks: shell.footerQuickLinks,
+        footerLegalLinks: shell.footerLegalLinks,
+        socialLinks: shell.socialLinks,
+      },
+      settings: {
+        heroAutoplayMs: settings.heroAutoplayMs,
+        featuredCategoriesLimit: settings.featuredCategoriesLimit,
+        promotionsLimit: settings.promotionsLimit,
+        bestSellersLimit: settings.bestSellersLimit,
+        newArrivalsLimit: settings.newArrivalsLimit,
+        brandsLimit: settings.brandsLimit,
+        loyaltyBadge: settings.loyaltyBadge,
+        loyaltyTitle: settings.loyaltyTitle,
+        loyaltyDescription: settings.loyaltyDescription,
+        loyaltyCtaLabel: settings.loyaltyCtaLabel,
+        loyaltyCtaHref: settings.loyaltyCtaHref,
+        loyaltyHighlightText: settings.loyaltyHighlightText,
+        loyaltyImageUrl: settings.loyaltyImageUrl,
+        newsletterTitle: settings.newsletterTitle,
+        newsletterDescription: settings.newsletterDescription,
+        newsletterPlaceholder: settings.newsletterPlaceholder,
+        newsletterButtonLabel: settings.newsletterButtonLabel,
+        newsletterSuccessMessage: settings.newsletterSuccessMessage,
+        newsletterErrorMessage: settings.newsletterErrorMessage,
+      },
+    });
+  } catch (error) {
+    if (isStorefrontSchemaError(error)) {
+      console.warn("Homepage dynamic sections tables are not available yet, using legacy homepage.");
+    } else {
+      console.error("Failed to load dynamic homepage sections:", error);
+    }
+    dynamicSections = [];
+  }
+
+  let customProductSections: StorefrontCustomHomepageProductSection[] = [];
+  try {
+    customProductSections = await getStorefrontCustomHomepageProductSections();
+  } catch (error) {
+    if (isStorefrontSchemaError(error)) {
+      console.warn(
+        "Homepage product sections tables are not available yet, using legacy product sections."
+      );
+    } else {
+      console.error("Failed to load custom homepage product sections:", error);
+    }
+    customProductSections = [];
+  }
+
   return {
     ...shell,
     heroSlides:
@@ -725,6 +799,9 @@ const fetchStorefrontHomeData = async (): Promise<StorefrontHomeData> => {
             sortOrder: item.sortOrder,
           }))
         : DEFAULT_TRUST_ITEMS,
+    dynamicSections,
+    hasDynamicSections: dynamicSections.length > 0,
+    customProductSections,
     hasError: false,
   };
 };
@@ -774,6 +851,9 @@ export const getStorefrontHomeData = async (): Promise<StorefrontHomeData> => {
       newArrivalProducts: [],
       brands: [],
       trustItems: DEFAULT_TRUST_ITEMS,
+      dynamicSections: [],
+      hasDynamicSections: false,
+      customProductSections: [],
       hasError: !schemaMismatch,
     };
   }

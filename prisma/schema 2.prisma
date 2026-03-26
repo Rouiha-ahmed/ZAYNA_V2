@@ -150,41 +150,40 @@ model Brand {
 }
 
 model Product {
-  id                          String                       @id @default(cuid())
-  name                        String
-  slug                        String                       @unique
-  sku                         String                       @unique
-  barcode                     String?
-  shortDescription            String?
-  fullDescription             String?
-  description                 String?
-  price                       Decimal                      @db.Decimal(10, 2)
-  regularPrice                Decimal                      @db.Decimal(10, 2)
-  salePrice                   Decimal?                     @db.Decimal(10, 2)
-  discount                    Int                          @default(0)
-  stock                       Int                          @default(0)
-  status                      ProductStatus                @default(new)
-  isActive                    Boolean                      @default(true)
-  isFeatured                  Boolean                      @default(false)
-  isBestSeller                Boolean                      @default(false)
-  isNewArrival                Boolean                      @default(false)
-  isPromotion                 Boolean                      @default(false)
-  seoTitle                    String?
-  seoDescription              String?
-  seoKeywords                 String?
-  brandId                     String?
-  brand                       Brand?                       @relation(fields: [brandId], references: [id], onDelete: SetNull)
-  images                      ProductImage[]
-  variants                    ProductVariant[]
-  categories                  ProductCategory[]
-  tags                        ProductTag[]
-  homepageSections            HomepageSectionProduct[]
-  homepageProductSectionItems HomepageProductSectionItem[]
-  relatedProducts             ProductRelated[]             @relation("ProductRelatedProducts")
-  relatedToProducts           ProductRelated[]             @relation("ProductRelatedToProducts")
-  orderItems                  OrderItem[]
-  createdAt                   DateTime                     @default(now())
-  updatedAt                   DateTime                     @updatedAt
+  id                String            @id @default(cuid())
+  name              String
+  slug              String            @unique
+  sku               String            @unique
+  barcode           String?
+  shortDescription  String?
+  fullDescription   String?
+  description       String?
+  price             Decimal           @db.Decimal(10, 2)
+  regularPrice      Decimal           @db.Decimal(10, 2)
+  salePrice         Decimal?          @db.Decimal(10, 2)
+  discount          Int               @default(0)
+  stock             Int               @default(0)
+  status            ProductStatus     @default(new)
+  isActive          Boolean           @default(true)
+  isFeatured        Boolean           @default(false)
+  isBestSeller      Boolean           @default(false)
+  isNewArrival      Boolean           @default(false)
+  isPromotion       Boolean           @default(false)
+  seoTitle          String?
+  seoDescription    String?
+  seoKeywords       String?
+  brandId           String?
+  brand             Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  images            ProductImage[]
+  variants          ProductVariant[]
+  categories        ProductCategory[]
+  tags              ProductTag[]
+  homepageSections  HomepageSectionProduct[]
+  relatedProducts   ProductRelated[]  @relation("ProductRelatedProducts")
+  relatedToProducts ProductRelated[]  @relation("ProductRelatedToProducts")
+  orderItems        OrderItem[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   @@index([name])
   @@index([sku])
@@ -409,13 +408,13 @@ model StorefrontSettings {
 }
 
 model HomepageSection {
-  id        String                   @id @default(cuid())
-  key       String                   @unique
+  id        String              @id @default(cuid())
+  key       String              @unique
   type      HomepageSectionType
   title     String
   subtitle  String?
-  isActive  Boolean                  @default(true)
-  order     Int                      @default(0)
+  isActive  Boolean             @default(true)
+  order     Int                 @default(0)
   layout    String?
   theme     String?
   ctaLabel  String?
@@ -423,8 +422,8 @@ model HomepageSection {
   limit     Int?
   config    Json?
   products  HomepageSectionProduct[]
-  createdAt DateTime                 @default(now())
-  updatedAt DateTime                 @updatedAt
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
 
   @@index([isActive, order])
   @@index([type])
@@ -440,35 +439,6 @@ model HomepageSectionProduct {
 
   @@id([sectionId, productId])
   @@index([sectionId, sortOrder])
-  @@index([productId])
-}
-
-model HomepageProductSection {
-  id        String                       @id @default(cuid())
-  title     String
-  subtitle  String?
-  slug      String                       @unique
-  isActive  Boolean                      @default(true)
-  order     Int                          @default(0)
-  items     HomepageProductSectionItem[]
-  createdAt DateTime                     @default(now())
-  updatedAt DateTime                     @updatedAt
-
-  @@index([isActive, order])
-}
-
-model HomepageProductSectionItem {
-  id        String                 @id @default(cuid())
-  sectionId String
-  productId String
-  order     Int                    @default(0)
-  section   HomepageProductSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  product   Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
-  createdAt DateTime               @default(now())
-  updatedAt DateTime               @updatedAt
-
-  @@unique([sectionId, productId])
-  @@index([sectionId, order])
   @@index([productId])
 }
 

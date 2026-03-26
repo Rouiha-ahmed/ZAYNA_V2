@@ -8,6 +8,7 @@ import {
   requireAdmin,
   type AdminDashboardData,
 } from "@/lib/admin";
+import { sanitizePublicImageUrl } from "@/lib/image";
 import { prisma } from "@/lib/prisma";
 
 const adminDataTag = getAdminDataTag();
@@ -1142,7 +1143,7 @@ const defaultHomepageSettings: AdminHomepagePageData["settings"] = {
   loyaltyCtaLabel: "Demander ma carte",
   loyaltyCtaHref: "/#contact",
   loyaltyHighlightText: "Service client disponible 7j/7",
-  loyaltyImageUrl: null,
+  loyaltyImageUrl: "/carte-fideliteEEEEE.png",
   newsletterTitle: "Restez informee des nouveautes",
   newsletterDescription: "Recevez nos conseils beaute, offres et lancements en avant-premiere.",
   newsletterPlaceholder: "Votre adresse e-mail",
@@ -1217,7 +1218,10 @@ async function fetchAdminHomepagePageData(): Promise<AdminHomepagePageData> {
         loyaltyCtaLabel: settingsRecord.loyaltyCtaLabel,
         loyaltyCtaHref: settingsRecord.loyaltyCtaHref,
         loyaltyHighlightText: settingsRecord.loyaltyHighlightText,
-        loyaltyImageUrl: settingsRecord.loyaltyImageUrl,
+        loyaltyImageUrl: sanitizePublicImageUrl(
+          settingsRecord.loyaltyImageUrl,
+          defaultHomepageSettings.loyaltyImageUrl || ""
+        ),
         newsletterTitle: settingsRecord.newsletterTitle,
         newsletterDescription: settingsRecord.newsletterDescription,
         newsletterPlaceholder: settingsRecord.newsletterPlaceholder,

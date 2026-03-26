@@ -32,6 +32,32 @@ export const resolveImageUrl = (source: ImageSource) => {
   return normalizeImageUrl(source.asset?.url || source.url || "");
 };
 
+export const sanitizePublicImageUrl = (
+  value: string | null | undefined,
+  fallback = ""
+) => {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  const trimmed = value.trim();
+  const prefixed = /^(https?:)?\/\//.test(trimmed) || trimmed.startsWith("/")
+    ? trimmed
+    : `/${trimmed}`;
+  const normalized = normalizeImageUrl(prefixed);
+
+  if (!normalized) {
+    return fallback;
+  }
+
+  const lower = normalized.toLowerCase();
+  if (lower.endsWith(".icloud") || normalized.startsWith("/.")) {
+    return fallback;
+  }
+
+  return normalized;
+};
+
 export const urlFor = (source: ImageSource) => ({
   url: () => resolveImageUrl(source),
 });
