@@ -701,10 +701,10 @@ async function importProducts() {
       const isBestSeller = bestSellerHandles.has(product.handle);
       const isPromotion = promotionHandles.has(product.handle) || discountPercent > 0;
       const createdAt = product.created_at ? new Date(product.created_at) : null;
+      const createdAtTimestamp = createdAt instanceof Date ? createdAt.getTime() : Number.NaN;
       const isNewArrival =
-        Boolean(createdAt) &&
-        Number.isFinite(createdAt?.getTime()) &&
-        Date.now() - createdAt.getTime() <= 1000 * 60 * 60 * 24 * 90;
+        Number.isFinite(createdAtTimestamp) &&
+        Date.now() - createdAtTimestamp <= 1000 * 60 * 60 * 24 * 90;
 
       const stock =
         typeof mainVariant.inventory_quantity === "number"
