@@ -28,6 +28,25 @@ const isHomepageProductSectionSchemaError = (error: unknown) => {
   return homepageProductSectionEntities.some((entity) => rawTable.includes(entity));
 };
 
+const isMissingProductIsActiveColumnError = (error: unknown) => {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+
+  if (error.code !== "P2022") {
+    return false;
+  }
+
+  const meta = error.meta as Prisma.JsonObject | undefined;
+  const rawColumn =
+    (typeof meta?.column === "string" && meta.column) ||
+    (typeof meta?.field === "string" && meta.field) ||
+    "";
+  const haystack = `${rawColumn} ${String(error.message || "")}`.toLowerCase();
+
+  return haystack.includes("product.isactive") || haystack.includes("isactive");
+};
+
 const hasHomepageProductSectionDelegates = () => {
   const raw = prisma as unknown as Record<string, unknown>;
   const sectionDelegate = raw["homepageProductSection"] as
@@ -91,17 +110,50 @@ export type AdminHomepageProductSectionsData = {
   sections: AdminHomepageProductSection[];
 };
 
-async function fetchAdminHomepageProductSectionsData(): Promise<AdminHomepageProductSectionsData> {
-  const products = await prisma.product.findMany({
-    orderBy: [{ name: "asc" }],
-    select: {
-      id: true,
-      name: true,
-      slug: true,
+async function loadAdminHomepageProducts(): Promise<AdminHomepageProductSectionsData["products"]> {
+  try {
+    const products = await prisma.product.findMany({
+      orderBy: [{ name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        isActive: true,
+      },
+      take: 400,
+    });
+
+    return products;
+  } catch (error) {
+    if (!isMissingProductIsActiveColumnError(error)) {
+      console.error("Failed to load products for admin homepage sections.", error);
+      return [];
+    }
+  }
+
+  try {
+    const products = await prisma.product.findMany({
+      orderBy: [{ name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+      },
+      take: 400,
+    });
+
+    return products.map((product) => ({
+      ...product,
       isActive: true,
-    },
-    take: 400,
-  });
+    }));
+  } catch (fallbackError) {
+    console.error("Failed to load products for admin homepage sections (fallback query).", fallbackError);
+    return [];
+  }
+}
+
+async function fetchAdminHomepageProductSectionsData(): Promise<AdminHomepageProductSectionsData> {
+  const products = await loadAdminHomepageProducts();
 
   if (!hasHomepageProductSectionDelegates()) {
     return {
@@ -125,7 +177,6 @@ async function fetchAdminHomepageProductSectionsData(): Promise<AdminHomepagePro
         id: string;
         name: string;
         slug: string;
-        isActive: boolean;
       };
     }>;
   }> = [];
@@ -143,7 +194,6 @@ async function fetchAdminHomepageProductSectionsData(): Promise<AdminHomepagePro
                 id: true,
                 name: true,
                 slug: true,
-                isActive: true,
               },
             },
           },
@@ -160,6 +210,8 @@ async function fetchAdminHomepageProductSectionsData(): Promise<AdminHomepagePro
     isSchemaReady = false;
   }
 
+  const productActiveById = new Map(products.map((product) => [product.id, product.isActive] as const));
+
   return {
     isSchemaReady,
     products,
@@ -175,7 +227,7 @@ async function fetchAdminHomepageProductSectionsData(): Promise<AdminHomepagePro
         id: item.product.id,
         name: item.product.name,
         slug: item.product.slug,
-        isActive: item.product.isActive,
+        isActive: productActiveById.get(item.product.id) ?? true,
         order: item.order,
       })),
     })),

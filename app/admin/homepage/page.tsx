@@ -38,7 +38,10 @@ import ImageDropInput from "@/components/admin/ImageDropInput";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { getAdminHomepageProductSectionsData } from "@/lib/admin-homepage-product-sections";
+import {
+  getAdminHomepageProductSectionsData,
+  type AdminHomepageProductSectionsData,
+} from "@/lib/admin-homepage-product-sections";
 import { getAdminHomepagePageData } from "@/lib/admin-pages";
 import { resolveImageUrl } from "@/lib/image";
 import { cn } from "@/lib/utils";
@@ -61,16 +64,26 @@ const linkGroups = [
 
 const trustIconSuggestions = ["truck", "shield", "headset", "wallet", "return"];
 
+const fallbackHomepageProductSectionsData: AdminHomepageProductSectionsData = {
+  isSchemaReady: false,
+  products: [],
+  sections: [],
+};
+
 export default async function AdminHomepagePage({
   searchParams,
 }: {
   searchParams: SearchParams;
 }) {
-  const [resolvedSearchParams, data, homepageProductSectionsData] = await Promise.all([
-    searchParams,
-    getAdminHomepagePageData(),
-    getAdminHomepageProductSectionsData(),
-  ]);
+  const [resolvedSearchParams, data] = await Promise.all([searchParams, getAdminHomepagePageData()]);
+  let homepageProductSectionsData = fallbackHomepageProductSectionsData;
+
+  try {
+    homepageProductSectionsData = await getAdminHomepageProductSectionsData();
+  } catch (error) {
+    console.error("Failed to load admin homepage product sections data.", error);
+  }
+
   const statusMessage = getQueryValue(resolvedSearchParams, "status");
   const errorMessage = getQueryValue(resolvedSearchParams, "error");
 
