@@ -230,7 +230,7 @@ const Shop = ({
 
         <div className="flex flex-col gap-5 border-t border-shop_light_green/15 md:flex-row">
           {/* Sidebar */}
-          <aside className="md:sticky md:top-20 md:self-start md:h-[calc(100vh-160px)] md:overflow-y-auto md:min-w-60 pb-5 md:border-r border-shop_light_green/20 scrollbar-hide">
+          <aside className="min-w-0 pb-5 md:w-60 md:shrink-0 md:border-r md:border-shop_light_green/20">
             <CategoryList
               categories={categories}
               selectedCategories={selectedCategories}
@@ -250,7 +250,7 @@ const Shop = ({
           </aside>
 
           {/* Products */}
-          <div className="flex-1 pt-5">
+          <div className="min-w-0 flex-1 pt-5">
             <div className="mb-3">
               <SortSelect
                 value={sortBy}
@@ -258,7 +258,7 @@ const Shop = ({
                 total={products.length}
               />
             </div>
-            <div className="relative h-[calc(100vh-160px)] overflow-y-auto pr-2 scrollbar-hide">
+            <div className="relative min-w-0 pr-2">
               {showInitialLoader ? (
                 <div className="flex flex-col items-center justify-center gap-3 p-20">
                   <Loader2 className="h-10 w-10 animate-spin text-shop_light_green" />
@@ -269,7 +269,7 @@ const Shop = ({
               ) : products.length > 0 ? (
                 <>
                   {showInlineLoading && (
-                    <div className="sticky top-0 z-10 mb-3 flex justify-end">
+                    <div className="mb-3 flex justify-end">
                       <div className="inline-flex items-center gap-2 rounded-full border border-shop_light_green/30 bg-white/90 px-3 py-1.5 text-xs font-medium text-shop_dark_green shadow-sm">
                         <Loader2 className="h-3.5 w-3.5 animate-spin text-shop_light_green" />
                         Mise a jour...

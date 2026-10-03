@@ -45,12 +45,14 @@ import {
   type OrderNextAction,
   type OrderOperatorRole,
 } from "@/lib/orders/domain";
+import OrderQuickView from "@/components/admin/orders/OrderQuickView";
 
 type WorkQueueOrder = {
   id: string;
   orderNumber: string;
   userId: string | null;
   customerName: string;
+  shippingName: string | null;
   email: string;
   phone: string | null;
   address: string | null;
@@ -58,6 +60,8 @@ type WorkQueueOrder = {
   state: string | null;
   zip: string | null;
   totalPrice: number;
+  amountDiscount: number;
+  promoCode: string | null;
   status: string;
   paymentStatus: string;
   paymentMethod: string;
@@ -73,6 +77,20 @@ type WorkQueueOrder = {
   version: number;
   itemsCount: number;
   itemNames: string[];
+  items: Array<{
+    id: string;
+    name: string;
+    price: number;
+    imageUrl: string | null;
+    quantity: number;
+    sku: string | null;
+  }>;
+  notes: Array<{
+    id: string;
+    content: string;
+    createdBy: string;
+    createdAt: string;
+  }>;
   nextAction: OrderNextAction;
   attentionLevel: string;
   issues: Array<{
@@ -125,6 +143,7 @@ type OrdersWorkQueueData = {
     pageSize: number;
   };
   orders: WorkQueueOrder[];
+  selectedOrder: WorkQueueOrder | null;
   options: { cities: string[]; carriers: string[] };
   pagination: { currentPage: number; totalPages: number; pageSize: number; filteredCount: number };
 };
@@ -278,7 +297,17 @@ function OrderActionDialog({
   );
 }
 
-function OrderRowActions({ order, operatorRole }: { order: WorkQueueOrder; operatorRole: OrderOperatorRole }) {
+function OrderRowActions({
+  order,
+  operatorRole,
+  onOpenQuickView,
+  returnTo,
+}: {
+  order: WorkQueueOrder;
+  operatorRole: OrderOperatorRole;
+  onOpenQuickView: (orderId: string) => void;
+  returnTo: string;
+}) {
   const [dialogAction, setDialogAction] = useState<OrderAction | null>(null);
   const primaryAction = nextActionToOrderAction(order.nextAction);
   const canPerformPrimary = primaryAction
@@ -289,22 +318,23 @@ function OrderRowActions({ order, operatorRole }: { order: WorkQueueOrder; opera
   const canCancel = order.status !== "cancelled" && order.deliveryStatus !== "delivered";
   const canCancelWithRole =
     canCancel && canRolePerformOrderAction(operatorRole, "CANCEL_ORDER");
+  const fullOrderHref = `/admin/orders/${order.id}?returnTo=${encodeURIComponent(returnTo)}`;
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
       <div className="flex items-center gap-2">
         {requiresInformation ? (
-          <Button asChild size="sm" className="rounded-xl bg-shop_btn_dark_green text-white hover:bg-shop_dark_green">
-            <Link href={`/admin/orders/${order.id}#client`}>{nextActionLabels[order.nextAction].button}</Link>
+          <Button type="button" size="sm" onClick={() => onOpenQuickView(order.id)} className="rounded-xl bg-shop_btn_dark_green text-white hover:bg-shop_dark_green">
+            {nextActionLabels[order.nextAction].button}
           </Button>
         ) : primaryAction && canPerformPrimary ? (
           <Button type="button" size="sm" onClick={() => setDialogAction(primaryAction)} className="rounded-xl bg-shop_btn_dark_green text-white hover:bg-shop_dark_green">
             {nextActionLabels[order.nextAction].button}
           </Button>
         ) : primaryAction ? (
-          <Button asChild variant="outline" size="sm" className="rounded-xl"><Link href={`/admin/orders/${order.id}`}>Manager requis</Link></Button>
+          <Button asChild variant="outline" size="sm" className="rounded-xl"><Link href={fullOrderHref}>Manager requis</Link></Button>
         ) : (
-          <Button asChild variant="outline" size="sm" className="rounded-xl"><Link href={`/admin/orders/${order.id}`}><Eye className="h-4 w-4" />Voir</Link></Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => onOpenQuickView(order.id)} className="rounded-xl"><Eye className="h-4 w-4" />Voir</Button>
         )}
         {canMarkDelivered ? (
           <Button type="button" variant="outline" size="sm" onClick={() => setDialogAction("MARK_DELIVERED")} className="rounded-xl border-emerald-200 text-emerald-700 hover:bg-emerald-50">
@@ -320,7 +350,8 @@ function OrderRowActions({ order, operatorRole }: { order: WorkQueueOrder; opera
       <Popover>
         <PopoverTrigger asChild><Button type="button" variant="outline" size="icon-sm" className="rounded-xl" aria-label={`Actions ${orderReference(order.orderNumber)}`}><MoreHorizontal className="h-4 w-4" /></Button></PopoverTrigger>
         <PopoverContent align="end" className="w-56 rounded-2xl p-2">
-          <Link href={`/admin/orders/${order.id}`} className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50"><Eye className="h-4 w-4" />Ouvrir le détail</Link>
+          <button type="button" onClick={() => onOpenQuickView(order.id)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"><Eye className="h-4 w-4" />Aperçu rapide</button>
+          <Link href={fullOrderHref} className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50">Ouvrir en grand</Link>
           {!canMarkDelivered && order.deliveryStatus === "delivered" ? <p className="px-3 py-2 text-xs font-medium text-emerald-700">Commande livrée</p> : null}
           {!canCancel && order.status === "cancelled" ? <p className="px-3 py-2 text-xs font-medium text-rose-600">Commande annulée</p> : null}
         </PopoverContent>
@@ -394,16 +425,59 @@ export default function OrdersWorkQueue({ data, statusMessage, errorMessage }: P
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const serializedSearchParams = searchParams.toString();
   const [navigating, startTransition] = useTransition();
   const [searchValue, setSearchValue] = useState(data.filters.query);
   const [advancedOpen, setAdvancedOpen] = useState(Boolean(data.filters.city || data.filters.carrier || data.filters.minAmount !== null || data.filters.maxAmount !== null || data.filters.issue !== "all" || data.filters.product));
   const [selected, setSelected] = useState<string[]>([]);
+  const quickViewReference = searchParams.get("order");
+
+  const returnTo = useMemo(() => {
+    const next = new URLSearchParams(serializedSearchParams);
+    next.delete("order");
+    next.delete("status");
+    next.delete("error");
+    return `${pathname}${next.size ? `?${next.toString()}` : ""}`;
+  }, [pathname, serializedSearchParams]);
+
+  const quickViewOrder = useMemo(() => {
+    if (!quickViewReference) return null;
+    const candidates = data.selectedOrder
+      ? [data.selectedOrder, ...data.orders]
+      : data.orders;
+    return (
+      candidates.find(
+        (order) =>
+          order.id === quickViewReference ||
+          order.orderNumber === quickViewReference
+      ) || null
+    );
+  }, [data.orders, data.selectedOrder, quickViewReference]);
+
+  const openQuickView = (orderId: string) => {
+    const next = new URLSearchParams(serializedSearchParams);
+    next.delete("status");
+    next.delete("error");
+    next.set("order", orderId);
+    window.history.pushState(null, "", `${pathname}?${next.toString()}`);
+  };
+
+  const closeQuickView = () => {
+    const next = new URLSearchParams(serializedSearchParams);
+    next.delete("order");
+    window.history.replaceState(
+      null,
+      "",
+      `${pathname}${next.size ? `?${next.toString()}` : ""}`
+    );
+  };
 
   const updateQuery = (updates: Record<string, string | null>) => {
     const next = new URLSearchParams(searchParams.toString());
     next.delete("status");
     next.delete("error");
     next.delete("page");
+    next.delete("order");
     for (const [key, value] of Object.entries(updates)) {
       const isDefaultValue =
         !value ||
@@ -461,11 +535,13 @@ export default function OrdersWorkQueue({ data, statusMessage, errorMessage }: P
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3"><p className="text-xs text-slate-500">Toutes les commandes</p><p className="mt-1 font-semibold text-slate-900">{number.format(data.metrics.totalOrders)}</p></div>
-        <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3"><p className="text-xs text-slate-500">Commandes payées</p><p className="mt-1 font-semibold text-slate-900">{number.format(data.metrics.paidOrders)}</p></div>
-        <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3"><p className="text-xs text-slate-500">CA encaissé</p><p className="mt-1 font-semibold text-slate-900">{currency.format(data.metrics.paidRevenue)}</p></div>
-        <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3"><p className="text-xs text-slate-500">Panier moyen payé</p><p className="mt-1 font-semibold text-slate-900">{currency.format(data.metrics.averagePaidBasket)}</p></div>
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6" aria-label="Indicateurs commandes">
+        <Link href="/admin/orders?view=all&sort=newest" className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 transition hover:border-shop_btn_dark_green"><p className="text-xs text-slate-500">Total commandes</p><p className="mt-1 font-semibold text-slate-900">{number.format(data.metrics.totalOrders)}</p><p className="mt-1 text-[10px] text-slate-400">Toutes périodes</p></Link>
+        <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3"><p className="text-xs text-slate-500">Chiffre d&apos;affaires</p><p className="mt-1 font-semibold text-slate-900">{currency.format(data.metrics.paidRevenue)}</p><p className="mt-1 text-[10px] text-slate-400">Encaissé uniquement</p></div>
+        <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3"><p className="text-xs text-slate-500">Panier moyen</p><p className="mt-1 font-semibold text-slate-900">{currency.format(data.metrics.averagePaidBasket)}</p><p className="mt-1 text-[10px] text-slate-400">Commandes encaissées</p></div>
+        <Link href="/admin/orders?sort=priority" className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 transition hover:border-shop_btn_dark_green"><p className="text-xs text-slate-500">Commandes en attente</p><p className="mt-1 font-semibold text-slate-900">{number.format(data.metrics.toProcess)}</p><p className="mt-1 text-[10px] text-slate-400">Action requise</p></Link>
+        <Link href="/admin/orders?view=delivered&sort=priority" className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 transition hover:border-shop_btn_dark_green"><p className="text-xs text-slate-500">Commandes livrées</p><p className="mt-1 font-semibold text-slate-900">{number.format(data.metrics.delivered)}</p><p className="mt-1 text-[10px] text-slate-400">État de livraison</p></Link>
+        <Link href="/admin/orders?view=cancelled&sort=priority" className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 transition hover:border-shop_btn_dark_green"><p className="text-xs text-slate-500">Commandes annulées</p><p className="mt-1 font-semibold text-slate-900">{number.format(data.metrics.cancelled)}</p><p className="mt-1 text-[10px] text-slate-400">État d&apos;annulation</p></Link>
       </section>
 
       <section className="overflow-hidden rounded-[28px] border border-white/80 bg-white/95 shadow-[0_26px_80px_-56px_rgba(15,23,42,0.42)]">
@@ -515,12 +591,23 @@ export default function OrdersWorkQueue({ data, statusMessage, errorMessage }: P
               <table className="w-full min-w-[1080px] text-left text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500"><tr><th className="px-4 py-3"><input type="checkbox" checked={allPageSelected} onChange={(event) => setSelected(event.target.checked ? data.orders.map((order) => order.id) : [])} aria-label="Sélectionner la page" /></th><th className="px-3 py-3">Commande</th><th className="px-3 py-3">Client / destination</th><th className="px-3 py-3">Montant / paiement</th><th className="px-3 py-3">Traitement</th><th className="px-3 py-3">Livraison</th><th className="px-3 py-3">Signal</th><th className="px-4 py-3 text-right">Opérations</th></tr></thead>
                 <tbody className="divide-y divide-slate-200">
-                  {data.orders.map((order) => <tr key={order.id} className={cn("hover:bg-slate-50/70", order.attentionLevel === "CRITICAL" && "bg-rose-50/30")}><td className="px-4 py-3"><input type="checkbox" checked={selected.includes(order.id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, order.id] : current.filter((id) => id !== order.id))} aria-label={`Sélectionner ${orderReference(order.orderNumber)}`} /></td><td className="px-3 py-3"><Link href={`/admin/orders/${order.id}`} className="font-semibold text-blue-700 hover:underline">{orderReference(order.orderNumber)}</Link><p className="mt-1 text-xs text-slate-500">{date.format(new Date(order.orderDate))} · {time.format(new Date(order.orderDate))}</p><p className="mt-1 text-xs text-slate-400">{order.itemsCount} article(s)</p></td><td className="px-3 py-3"><p className="font-semibold text-slate-900">{order.customerName}</p><p className="mt-1 max-w-48 truncate text-xs text-slate-500">{order.email}</p><p className="mt-1 text-xs text-slate-500">{order.city || "Ville manquante"}</p></td><td className="px-3 py-3"><p className="font-semibold text-slate-900">{currency.format(order.totalPrice)}</p><p className="mt-1 text-xs text-slate-500">{labels[order.paymentMethod] || order.paymentMethod}</p><div className="mt-1"><StatusBadge value={order.paymentStatus} /></div></td><td className="px-3 py-3"><StatusBadge value={order.fulfillmentStatus} />{order.sla ? <p className={cn("mt-2 text-xs", order.sla.isOverdue ? "font-semibold text-rose-600" : "text-slate-500")}>{order.sla.isOverdue ? "SLA dépassé" : `Échéance ${date.format(new Date(order.sla.dueAt))}`}</p> : null}</td><td className="px-3 py-3"><StatusBadge value={order.deliveryStatus} /><p className="mt-2 text-xs text-slate-500">{order.deliveryCompany || "Transporteur non assigné"}</p>{order.trackingNumber ? <p className="mt-1 max-w-36 truncate text-xs text-slate-400">{order.trackingNumber}</p> : null}</td><td className="px-3 py-3">{order.issues[0] ? <span className={cn("inline-flex max-w-48 items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-semibold", order.issues[0].severity === "critical" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700")}><AlertTriangle className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{order.issues[0].message}</span></span> : <span className="text-xs text-slate-400">Aucun signal</span>}{order.issues.length > 1 ? <p className="mt-1 text-[10px] text-slate-500">+ {order.issues.length - 1} autre(s)</p> : null}</td><td className="px-4 py-3"><OrderRowActions order={order} operatorRole={data.operatorRole} /></td></tr>)}
+                  {data.orders.map((order) => (
+                    <tr key={order.id} className={cn("hover:bg-slate-50/70", order.attentionLevel === "CRITICAL" && "bg-rose-50/30")}>
+                      <td className="px-4 py-3"><input type="checkbox" checked={selected.includes(order.id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, order.id] : current.filter((id) => id !== order.id))} aria-label={`Sélectionner ${orderReference(order.orderNumber)}`} /></td>
+                      <td className="px-3 py-3"><button type="button" onClick={() => openQuickView(order.id)} className="font-semibold text-blue-700 hover:underline">{orderReference(order.orderNumber)}</button><p className="mt-1 text-xs text-slate-500">{date.format(new Date(order.orderDate))} · {time.format(new Date(order.orderDate))}</p><p className="mt-1 text-xs text-slate-400">{order.itemsCount} article(s)</p></td>
+                      <td className="px-3 py-3"><p className="font-semibold text-slate-900">{order.customerName}</p><p className="mt-1 max-w-48 truncate text-xs text-slate-500">{order.email}</p><p className="mt-1 text-xs text-slate-500">{order.city || "Ville manquante"}</p></td>
+                      <td className="px-3 py-3"><p className="font-semibold text-slate-900">{currency.format(order.totalPrice)}</p><p className="mt-1 text-xs text-slate-500">{labels[order.paymentMethod] || order.paymentMethod}</p><div className="mt-1"><StatusBadge value={order.paymentStatus} /></div></td>
+                      <td className="px-3 py-3"><StatusBadge value={order.fulfillmentStatus} />{order.sla ? <p className={cn("mt-2 text-xs", order.sla.isOverdue ? "font-semibold text-rose-600" : "text-slate-500")}>{order.sla.isOverdue ? "SLA dépassé" : `Échéance ${date.format(new Date(order.sla.dueAt))}`}</p> : null}</td>
+                      <td className="px-3 py-3"><StatusBadge value={order.deliveryStatus} /><p className="mt-2 text-xs text-slate-500">{order.deliveryCompany || "Transporteur non assigné"}</p>{order.trackingNumber ? <p className="mt-1 max-w-36 truncate text-xs text-slate-400">{order.trackingNumber}</p> : null}</td>
+                      <td className="px-3 py-3">{order.issues[0] ? <span className={cn("inline-flex max-w-48 items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-semibold", order.issues[0].severity === "critical" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700")}><AlertTriangle className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{order.issues[0].message}</span></span> : <span className="text-xs text-slate-400">Aucun signal</span>}{order.issues.length > 1 ? <p className="mt-1 text-[10px] text-slate-500">+ {order.issues.length - 1} autre(s)</p> : null}</td>
+                      <td className="px-4 py-3"><OrderRowActions order={order} operatorRole={data.operatorRole} onOpenQuickView={openQuickView} returnTo={returnTo} /></td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
 
-            <div className="divide-y divide-slate-200 md:hidden">{data.orders.map((order) => <article key={order.id} className={cn("p-4", order.attentionLevel === "CRITICAL" && "bg-rose-50/30")}><div className="flex items-start justify-between gap-3"><div><Link href={`/admin/orders/${order.id}`} className="font-semibold text-blue-700">{orderReference(order.orderNumber)}</Link><p className="mt-1 text-xs text-slate-500">{order.customerName} · {order.city || "Ville manquante"}</p></div><p className="font-semibold text-slate-900">{currency.format(order.totalPrice)}</p></div><div className="mt-3 flex flex-wrap gap-2"><StatusBadge value={order.fulfillmentStatus} /><StatusBadge value={order.paymentStatus} /><StatusBadge value={order.deliveryStatus} /></div>{order.issues[0] ? <p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{order.issues[0].message}</p> : null}<div className="mt-4"><OrderRowActions order={order} operatorRole={data.operatorRole} /></div></article>)}</div>
+            <div className="divide-y divide-slate-200 md:hidden">{data.orders.map((order) => <article key={order.id} className={cn("p-4", order.attentionLevel === "CRITICAL" && "bg-rose-50/30")}><div className="flex items-start justify-between gap-3"><div><button type="button" onClick={() => openQuickView(order.id)} className="font-semibold text-blue-700">{orderReference(order.orderNumber)}</button><p className="mt-1 text-xs text-slate-500">{order.customerName} · {order.city || "Ville manquante"}</p></div><p className="font-semibold text-slate-900">{currency.format(order.totalPrice)}</p></div><div className="mt-3 flex flex-wrap gap-2"><StatusBadge value={order.fulfillmentStatus} /><StatusBadge value={order.paymentStatus} /><StatusBadge value={order.deliveryStatus} /></div>{order.issues[0] ? <p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{order.issues[0].message}</p> : null}<div className="mt-4"><OrderRowActions order={order} operatorRole={data.operatorRole} onOpenQuickView={openQuickView} returnTo={returnTo} /></div></article>)}</div>
           </>
         ) : (
           <div className="px-5 py-16 text-center"><PackageCheck className="mx-auto h-9 w-9 text-emerald-400" /><p className="mt-4 font-semibold text-slate-900">{data.filters.view === "to-process" ? "Aucune commande à traiter" : "Aucune commande trouvée"}</p><p className="mt-2 text-sm text-slate-500">{data.filters.view === "to-process" ? "La file opérationnelle est à jour." : "Modifiez votre recherche ou vos filtres."}</p></div>
@@ -528,6 +615,15 @@ export default function OrdersWorkQueue({ data, statusMessage, errorMessage }: P
 
         <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between"><p>Affichage de {start} à {end} sur {data.pagination.filteredCount} commandes</p><div className="flex items-center gap-2"><select value={data.pagination.pageSize} onChange={(event) => updateQuery({ pageSize: event.target.value })} className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs"><option value="10">10 / page</option><option value="20">20 / page</option><option value="50">50 / page</option></select><Button asChild variant="outline" size="icon-sm" className="rounded-xl"><Link href={pageHref(Math.max(1, data.pagination.currentPage - 1))} aria-disabled={data.pagination.currentPage <= 1}><ChevronLeft className="h-4 w-4" /></Link></Button><span className="rounded-xl bg-shop_btn_dark_green px-3 py-1.5 text-xs font-semibold text-white">{data.pagination.currentPage} / {data.pagination.totalPages}</span><Button asChild variant="outline" size="icon-sm" className="rounded-xl"><Link href={pageHref(Math.min(data.pagination.totalPages, data.pagination.currentPage + 1))} aria-disabled={data.pagination.currentPage >= data.pagination.totalPages}><ChevronRight className="h-4 w-4" /></Link></Button></div></div>
       </section>
+
+      <OrderQuickView
+        open={Boolean(quickViewReference)}
+        order={quickViewOrder}
+        operatorRole={data.operatorRole}
+        returnTo={returnTo}
+        onClose={closeQuickView}
+        onRetry={() => router.refresh()}
+      />
     </div>
   );
 }

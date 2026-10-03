@@ -28,6 +28,7 @@ export const findPromoCodeByCode = async (
     endsAt: promo.endsAt?.toISOString(),
     usageLimit: promo.usageLimit ?? undefined,
     usedCount: promo.usedCount,
+    archivedAt: promo.archivedAt?.toISOString(),
   };
 };
 

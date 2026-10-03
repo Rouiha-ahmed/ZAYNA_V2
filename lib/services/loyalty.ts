@@ -86,6 +86,10 @@ export async function writeAuditLog(
     metadata?: Record<string, unknown>;
   },
 ) {
+  const metadata = {
+    ...(input.metadata || {}),
+    ...(input.actor?.label ? { actorLabel: input.actor.label } : {}),
+  };
   return db.adminAuditLog.create({
     data: {
       actorUserId: input.actor?.userId || null,
@@ -93,7 +97,7 @@ export async function writeAuditLog(
       action: input.action,
       entity: input.entity,
       entityId: input.entityId || null,
-      metadata: asJson(input.metadata),
+      metadata: asJson(Object.keys(metadata).length ? metadata : undefined),
     },
   });
 }

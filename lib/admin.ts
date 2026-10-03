@@ -195,27 +195,7 @@ export const getAdminIdentity = cache(async (): Promise<AdminIdentity> => {
   }
 
   const normalizedUserId = userId.toLowerCase();
-  if (userIds.has(normalizedUserId)) {
-    return {
-      userId,
-      email: null,
-      displayName: userId,
-      isAdmin: true,
-      accessConfigured,
-      usesDevelopmentFallback: false,
-    };
-  }
-
-  if (usesDevelopmentFallback) {
-    return {
-      userId,
-      email: null,
-      displayName: userId,
-      isAdmin: true,
-      accessConfigured,
-      usesDevelopmentFallback: true,
-    };
-  }
+  const isConfiguredUserId = userIds.has(normalizedUserId);
 
   let user: Awaited<ReturnType<typeof currentUser>> | null = null;
 
@@ -231,7 +211,8 @@ export const getAdminIdentity = cache(async (): Promise<AdminIdentity> => {
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
     email ||
     userId;
-  const isConfiguredAdmin = email ? emails.has(email.toLowerCase()) : false;
+  const isConfiguredAdmin =
+    isConfiguredUserId || (email ? emails.has(email.toLowerCase()) : false);
 
   return {
     userId,

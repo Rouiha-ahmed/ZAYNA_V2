@@ -24,7 +24,7 @@ const shortcuts = [
     icon: Layers3,
   },
   {
-    href: "/admin/promos#new-promo",
+    href: "/admin/promos?drawer=create",
     label: "Promotions",
     description: "Lancer une offre rapide",
     icon: Percent,

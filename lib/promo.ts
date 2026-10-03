@@ -8,11 +8,120 @@ export type PromoCodeRecord = {
   discountValue?: number;
   minimumOrderAmount?: number;
   allowedPaymentMethods?: PaymentMethod[];
-  startsAt?: string;
-  endsAt?: string;
+  startsAt?: string | Date | null;
+  endsAt?: string | Date | null;
   usageLimit?: number;
   usedCount?: number;
+  archivedAt?: string | Date | null;
 };
+
+export const PROMO_EXPIRING_SOON_DAYS = 7;
+
+export type PromoCodeStatus =
+  | "ARCHIVED"
+  | "INACTIVE"
+  | "SCHEDULED"
+  | "ACTIVE"
+  | "EXPIRING_SOON"
+  | "EXPIRED"
+  | "LIMIT_REACHED";
+
+export type PromoCodeConfiguration = {
+  title: string;
+  code: string;
+  discountType: "percentage" | "fixed";
+  discountValue: number;
+  minimumOrderAmount: number;
+  allowedPaymentMethods: PaymentMethod[];
+  startsAt: Date | null;
+  endsAt: Date | null;
+  usageLimit: number | null;
+};
+
+const dateTimestamp = (value?: string | Date | null) =>
+  value ? new Date(value).getTime() : null;
+
+export function normalizePromoCode(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+export function validatePromoCodeConfiguration(
+  configuration: PromoCodeConfiguration
+) {
+  if (!configuration.title.trim()) throw new Error("Le nom de la campagne est obligatoire.");
+  if (!configuration.code) throw new Error("Le code promo est obligatoire.");
+  if (
+    !Number.isFinite(configuration.discountValue) ||
+    configuration.discountValue <= 0
+  ) {
+    throw new Error("La valeur de remise doit être supérieure à zéro.");
+  }
+  if (
+    configuration.discountType === "percentage" &&
+    configuration.discountValue > 100
+  ) {
+    throw new Error("Une remise en pourcentage ne peut pas dépasser 100 %.");
+  }
+  if (
+    !Number.isFinite(configuration.minimumOrderAmount) ||
+    configuration.minimumOrderAmount < 0
+  ) {
+    throw new Error("Le minimum de commande ne peut pas être négatif.");
+  }
+  if (
+    configuration.usageLimit !== null &&
+    (!Number.isInteger(configuration.usageLimit) || configuration.usageLimit < 1)
+  ) {
+    throw new Error("La limite d’utilisation doit être un entier positif.");
+  }
+  if (!configuration.allowedPaymentMethods.length) {
+    throw new Error("Sélectionnez au moins un moyen de paiement.");
+  }
+  if (
+    configuration.startsAt &&
+    configuration.endsAt &&
+    configuration.endsAt <= configuration.startsAt
+  ) {
+    throw new Error("La date de fin doit être postérieure à la date de début.");
+  }
+}
+
+export function getPromoCodeStatus(
+  promo: PromoCodeRecord,
+  now = new Date(),
+  expiringSoonDays = PROMO_EXPIRING_SOON_DAYS
+): PromoCodeStatus {
+  if (promo.archivedAt) return "ARCHIVED";
+  if (!promo.active) return "INACTIVE";
+
+  const timestamp = now.getTime();
+  const startsAt = dateTimestamp(promo.startsAt);
+  const endsAt = dateTimestamp(promo.endsAt);
+
+  if (startsAt !== null && startsAt > timestamp) return "SCHEDULED";
+  if (endsAt !== null && endsAt < timestamp) return "EXPIRED";
+  if (
+    typeof promo.usageLimit === "number" &&
+    (promo.usedCount || 0) >= promo.usageLimit
+  ) {
+    return "LIMIT_REACHED";
+  }
+  if (
+    endsAt !== null &&
+    endsAt <= timestamp + expiringSoonDays * 24 * 60 * 60 * 1000
+  ) {
+    return "EXPIRING_SOON";
+  }
+  return "ACTIVE";
+}
 
 export type PromoCalculationResult = {
   valid: boolean;
@@ -37,7 +146,18 @@ export function calculatePromoDiscount(
     };
   }
 
-  if (!promo.active) {
+  const status = getPromoCodeStatus(promo);
+
+  if (status === "ARCHIVED") {
+    return {
+      valid: false,
+      message: "Promo code is unavailable.",
+      discountAmount: 0,
+      finalTotal: subtotal,
+    };
+  }
+
+  if (status === "INACTIVE") {
     return {
       valid: false,
       message: "Promo code is inactive.",
@@ -46,8 +166,7 @@ export function calculatePromoDiscount(
     };
   }
 
-  const now = Date.now();
-  if (promo.startsAt && new Date(promo.startsAt).getTime() > now) {
+  if (status === "SCHEDULED") {
     return {
       valid: false,
       message: "Promo code is not active yet.",
@@ -55,7 +174,7 @@ export function calculatePromoDiscount(
       finalTotal: subtotal,
     };
   }
-  if (promo.endsAt && new Date(promo.endsAt).getTime() < now) {
+  if (status === "EXPIRED") {
     return {
       valid: false,
       message: "Promo code has expired.",
@@ -85,10 +204,7 @@ export function calculatePromoDiscount(
     };
   }
 
-  if (
-    typeof promo.usageLimit === "number" &&
-    (promo.usedCount || 0) >= promo.usageLimit
-  ) {
+  if (status === "LIMIT_REACHED") {
     return {
       valid: false,
       message: "Promo usage limit reached.",

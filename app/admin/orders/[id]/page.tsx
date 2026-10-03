@@ -1,18 +1,11 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { ReactNode } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
   CalendarClock,
   CheckCircle2,
-  CreditCard,
-  MapPin,
-  Package2,
   ReceiptText,
-  Truck,
-  UserRound,
 } from "lucide-react";
 
 import {
@@ -23,62 +16,19 @@ import {
   OrderReturnForm,
   OrderSecondaryActions,
 } from "@/components/admin/orders/OrderDetailControls";
+import {
+  OrderCustomerSummary,
+  OrderDeliverySummary,
+  OrderDetailSurface as Surface,
+  OrderItemsSummary,
+  OrderPaymentSummary,
+  OrderStatusBadge as StatusBadge,
+  orderCurrency as currency,
+  orderDateTime as dateTime,
+  orderReference,
+} from "@/components/admin/orders/OrderDetailShared";
 import { getAdminOrderDetail } from "@/lib/orders/admin-data";
-import { resolveImageUrl } from "@/lib/image";
 import { cn } from "@/lib/utils";
-
-const currency = new Intl.NumberFormat("fr-MA", { style: "currency", currency: "MAD", maximumFractionDigits: 2 });
-const dateTime = new Intl.DateTimeFormat("fr-MA", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-const orderReference = (value: string) => `#${value.slice(-8).toUpperCase()}`;
-
-const labels: Record<string, string> = {
-  to_prepare: "À préparer",
-  preparing: "En préparation",
-  ready: "Prête",
-  shipped: "Expédiée",
-  cancelled: "Annulée",
-  pending: "En attente",
-  partial: "Partiel",
-  paid: "Payé",
-  failed: "Échoué",
-  refunded: "Remboursé",
-  not_assigned: "Non expédiée",
-  in_transit: "En transit",
-  out_for_delivery: "En livraison",
-  delivered: "Livrée",
-  delayed: "Retard",
-  returned: "Retournée",
-  cod: "Paiement à la livraison (COD)",
-  cmi_card: "Carte bancaire",
-  installments: "Paiement en plusieurs fois",
-  requested: "Demandé",
-  approved: "Approuvé",
-  received: "Reçu",
-  inspected: "Inspecté",
-  closed: "Clôturé",
-  rejected: "Refusé",
-};
-
-const toneFor = (value: string) => {
-  if (["paid", "delivered", "closed"].includes(value)) return "bg-emerald-50 text-emerald-700 ring-emerald-200";
-  if (["to_prepare", "preparing", "pending", "partial", "ready", "delayed", "requested"].includes(value)) return "bg-amber-50 text-amber-700 ring-amber-200";
-  if (["shipped", "in_transit", "out_for_delivery", "approved", "received", "inspected"].includes(value)) return "bg-blue-50 text-blue-700 ring-blue-200";
-  if (["cancelled", "failed", "returned", "refunded", "rejected"].includes(value)) return "bg-rose-50 text-rose-700 ring-rose-200";
-  return "bg-slate-100 text-slate-600 ring-slate-200";
-};
-
-function StatusBadge({ value }: { value: string }) {
-  return <span className={cn("inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset", toneFor(value))}>{labels[value] || value}</span>;
-}
-
-function Surface({ title, icon: Icon, action, children, id }: { title: string; icon: typeof UserRound; action?: ReactNode; children: ReactNode; id?: string }) {
-  return (
-    <section id={id} className="rounded-[26px] border border-white/80 bg-white/95 p-5 shadow-[0_24px_70px_-56px_rgba(15,23,42,0.42)]">
-      <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-shop_btn_dark_green"><Icon className="h-4 w-4" /></span><h2 className="font-semibold text-slate-950">{title}</h2></div>{action}</div>
-      <div className="mt-4">{children}</div>
-    </section>
-  );
-}
 
 const formatDuration = (milliseconds: number | null) => {
   if (milliseconds === null) return "En cours";
@@ -91,18 +41,29 @@ const metadataRecord = (value: unknown): Record<string, unknown> | null =>
     ? (value as Record<string, unknown>)
     : null;
 
-export default async function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AdminOrderDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { id } = await params;
+  const resolvedSearchParams = await searchParams;
+  const rawReturnTo = resolvedSearchParams.returnTo;
+  const requestedReturnTo = Array.isArray(rawReturnTo) ? rawReturnTo[0] : rawReturnTo;
+  const returnTo = requestedReturnTo?.startsWith("/admin/orders")
+    ? requestedReturnTo
+    : "/admin/orders";
   const order = await getAdminOrderDetail(id);
   if (!order) notFound();
 
   const canMarkDelivered = order.fulfillmentStatus === "shipped" && ["in_transit", "out_for_delivery", "delayed"].includes(order.deliveryStatus);
   const canCancel = order.operatorRole !== "ORDER_AGENT" && order.status !== "cancelled" && order.deliveryStatus !== "delivered";
-  const subtotal = order.items.reduce((sum, item) => sum + item.productPriceSnapshot * item.quantity, 0);
 
   return (
     <div className="space-y-6">
-      <Link href="/admin/orders" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-shop_btn_dark_green"><ArrowLeft className="h-4 w-4" />Retour aux commandes</Link>
+      <Link href={returnTo} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-shop_btn_dark_green"><ArrowLeft className="h-4 w-4" />Retour aux commandes</Link>
 
       <header className="flex flex-col gap-5 rounded-[28px] border border-white/80 bg-white/95 p-6 shadow-[0_26px_80px_-56px_rgba(15,23,42,0.42)] lg:flex-row lg:items-start lg:justify-between">
         <div>
@@ -117,18 +78,19 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.9fr)]">
         <div className="space-y-6">
-          <Surface title={`Articles (${order.items.reduce((sum, item) => sum + item.quantity, 0)})`} icon={Package2}>
-            <div className="divide-y divide-slate-100">
-              {order.items.map((item) => (
-                <div key={item.id} className="flex items-center gap-4 py-4 first:pt-0 last:pb-0">
-                  <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">{item.productImageUrlSnapshot ? <Image src={resolveImageUrl(item.productImageUrlSnapshot)} alt={item.productNameSnapshot} fill unoptimized sizes="4rem" className="object-contain p-2" /> : <span className="flex h-full items-center justify-center text-slate-300"><Package2 className="h-5 w-5" /></span>}</div>
-                  <div className="min-w-0 flex-1"><p className="font-semibold text-slate-900">{item.productNameSnapshot}</p><p className="mt-1 text-xs text-slate-500">SKU {item.sku || "non disponible"} · Quantité {item.quantity}</p><p className="mt-1 text-xs text-slate-500">{currency.format(item.productPriceSnapshot)} / unité</p></div>
-                  <strong className="text-sm text-slate-900">{currency.format(item.productPriceSnapshot * item.quantity)}</strong>
-                </div>
-              ))}
-            </div>
-            <div className="mt-5 space-y-2 border-t border-slate-200 pt-4 text-sm"><div className="flex justify-between text-slate-600"><span>Sous-total articles</span><span>{currency.format(subtotal)}</span></div>{order.amountDiscount > 0 ? <div className="flex justify-between text-emerald-700"><span>Remise {order.promoCode ? `(${order.promoCode})` : ""}</span><span>- {currency.format(order.amountDiscount)}</span></div> : null}<div className="flex justify-between border-t border-slate-100 pt-3 text-base font-semibold text-slate-950"><span>Total commande</span><span>{currency.format(order.totalPrice)}</span></div></div>
-          </Surface>
+          <OrderItemsSummary
+            items={order.items.map((item) => ({
+              id: item.id,
+              name: item.productNameSnapshot,
+              price: item.productPriceSnapshot,
+              imageUrl: item.productImageUrlSnapshot,
+              quantity: item.quantity,
+              sku: item.sku,
+            }))}
+            totalPrice={order.totalPrice}
+            amountDiscount={order.amountDiscount}
+            promoCode={order.promoCode}
+          />
 
           <Surface title="Traitement et performance" icon={CalendarClock}>
             <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Commande reçue → préparée</p><p className="mt-2 font-semibold text-slate-900">{formatDuration(order.performance.preparationMs)}</p>{order.preparedAt ? <p className="mt-1 text-xs text-slate-500">Préparée le {dateTime.format(order.preparedAt)}</p> : null}</div><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Commande reçue → livrée</p><p className="mt-2 font-semibold text-slate-900">{formatDuration(order.performance.deliveryMs)}</p>{order.deliveredAt ? <p className="mt-1 text-xs text-slate-500">Livrée le {dateTime.format(order.deliveredAt)}</p> : null}</div></div>
@@ -149,18 +111,22 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
         </div>
 
         <aside className="space-y-6">
-          <Surface id="client" title="Client et livraison" icon={UserRound} action={order.operatorRole !== "ORDER_AGENT" || order.fulfillmentStatus !== "shipped" ? <OrderAddressForm order={{ id: order.id, name: order.shippingName || order.customerName, phone: order.shippingPhone || "", address: order.shippingAddress || "", city: order.shippingCity || "", state: order.shippingState || "", zip: order.shippingZip || "", shipped: order.fulfillmentStatus === "shipped" }} /> : undefined}>
-            <div className="space-y-2 text-sm"><p className="font-semibold text-slate-900">{order.shippingName || order.customerName}</p><p className="text-slate-600">{order.shippingPhone || "Téléphone manquant"}</p><p className="text-slate-600">{order.email}</p><div className="mt-3 rounded-2xl bg-slate-50 p-3 text-slate-600"><MapPin className="mr-2 inline h-4 w-4" />{order.shippingAddress || "Adresse manquante"}<br /><span className="ml-6">{[order.shippingCity, order.shippingState, order.shippingZip].filter(Boolean).join(" · ") || "Ville manquante"}</span></div>{order.user ? <Link href={`/admin/clients/${order.user.id}`} className="inline-block text-xs font-semibold text-blue-700 hover:underline">Voir le profil client →</Link> : null}</div>
-            <div className="mt-4"><OrderContactButtons orderId={order.id} phone={order.shippingPhone} email={order.email} /></div>
-          </Surface>
+          <OrderCustomerSummary
+            name={order.shippingName || order.customerName}
+            email={order.email}
+            phone={order.shippingPhone}
+            address={order.shippingAddress}
+            city={order.shippingCity}
+            state={order.shippingState}
+            zip={order.shippingZip}
+            userId={order.user?.id || null}
+            action={order.operatorRole !== "ORDER_AGENT" || order.fulfillmentStatus !== "shipped" ? <OrderAddressForm order={{ id: order.id, name: order.shippingName || order.customerName, phone: order.shippingPhone || "", address: order.shippingAddress || "", city: order.shippingCity || "", state: order.shippingState || "", zip: order.shippingZip || "", shipped: order.fulfillmentStatus === "shipped" }} /> : undefined}
+            after={<OrderContactButtons orderId={order.id} phone={order.shippingPhone} email={order.email} />}
+          />
 
-          <Surface title="Paiement" icon={CreditCard}>
-            <div className="space-y-3 text-sm"><div className="flex items-center justify-between gap-3"><span className="text-slate-500">Méthode</span><strong>{labels[order.paymentMethod] || order.paymentMethod}</strong></div><div className="flex items-center justify-between gap-3"><span className="text-slate-500">Statut</span><StatusBadge value={order.paymentStatus} /></div><div className="flex items-center justify-between gap-3"><span className="text-slate-500">Montant</span><strong>{currency.format(order.totalPrice)}</strong></div>{order.stripePaymentIntentId ? <div className="flex items-center justify-between gap-3"><span className="text-slate-500">Référence</span><code className="text-xs">••••{order.stripePaymentIntentId.slice(-8)}</code></div> : null}{order.paymentMethod === "cod" && order.paymentStatus !== "paid" ? <p className="rounded-xl bg-violet-50 px-3 py-2 text-xs text-violet-700">COD en attente d&apos;encaissement. La préparation reste autorisée.</p> : null}</div>
-          </Surface>
+          <OrderPaymentSummary method={order.paymentMethod} status={order.paymentStatus} totalPrice={order.totalPrice} reference={order.stripePaymentIntentId} />
 
-          <Surface title="Livraison" icon={Truck}>
-            <div className="space-y-3 text-sm"><div className="flex justify-between gap-3"><span className="text-slate-500">Statut</span><StatusBadge value={order.deliveryStatus} /></div><div className="flex justify-between gap-3"><span className="text-slate-500">Transporteur</span><strong>{order.deliveryCompany || "Non assigné"}</strong></div><div className="flex justify-between gap-3"><span className="text-slate-500">Tracking</span><strong className="max-w-48 truncate">{order.trackingNumber || "À venir"}</strong></div>{order.estimatedDeliveryAt ? <div className="flex justify-between gap-3"><span className="text-slate-500">Livraison estimée</span><strong>{dateTime.format(order.estimatedDeliveryAt)}</strong></div> : null}</div>
-          </Surface>
+          <OrderDeliverySummary status={order.deliveryStatus} carrier={order.deliveryCompany} trackingNumber={order.trackingNumber} estimatedDeliveryAt={order.estimatedDeliveryAt} />
 
           <Surface title="Notes internes" icon={ReceiptText}>
             <OrderNoteForm orderId={order.id} />

@@ -375,6 +375,7 @@ export const orderListSelect = {
   deliveryCompany: true,
   trackingNumber: true,
   shippingPhone: true,
+  shippingName: true,
   shippingAddress: true,
   shippingCity: true,
   shippingState: true,
@@ -382,6 +383,8 @@ export const orderListSelect = {
   orderDate: true,
   statusChangedAt: true,
   version: true,
+  amountDiscount: true,
+  promoCode: true,
   items: {
     orderBy: { createdAt: "asc" as const },
     select: {
@@ -397,6 +400,11 @@ export const orderListSelect = {
   returns: {
     orderBy: { createdAt: "desc" as const },
     select: { id: true, status: true },
+  },
+  notes: {
+    orderBy: { createdAt: "desc" as const },
+    take: 3,
+    select: { id: true, content: true, createdBy: true, createdAt: true },
   },
 } satisfies Prisma.OrderSelect;
 
@@ -447,12 +455,15 @@ const mapAdminOrderListItem = (
     userId: order.userId,
     customerName: order.customerName,
     email: order.email,
+    shippingName: order.shippingName,
     phone: order.shippingPhone,
     address: order.shippingAddress,
     city: order.shippingCity,
     state: order.shippingState,
     zip: order.shippingZip,
     totalPrice: Number(order.totalPrice),
+    amountDiscount: Number(order.amountDiscount),
+    promoCode: order.promoCode,
     status: order.status,
     paymentStatus: order.paymentStatus,
     paymentMethod: order.paymentMethod,
@@ -468,6 +479,15 @@ const mapAdminOrderListItem = (
     version: order.version,
     itemsCount: order.items.reduce((sum, item) => sum + item.quantity, 0),
     itemNames: order.items.map((item) => item.productNameSnapshot),
+    items: order.items.map((item) => ({
+      id: item.id,
+      name: item.productNameSnapshot,
+      price: Number(item.productPriceSnapshot),
+      imageUrl: item.productImageUrlSnapshot,
+      quantity: item.quantity,
+      sku: item.product?.sku || null,
+    })),
+    notes: order.notes,
     nextAction: operational.nextAction,
     attentionLevel: operational.attentionLevel,
     issues: operational.issues,
@@ -506,7 +526,10 @@ export const collectedRevenueWhere = {
   paymentStatus: { in: [...collectedPaymentStatuses] },
 } satisfies Prisma.OrderWhereInput;
 
-export async function getAdminOrdersWorkQueueData(filters: AdminOrderFilters) {
+export async function getAdminOrdersWorkQueueData(
+  filters: AdminOrderFilters,
+  selectedOrderReference?: string
+) {
   const operator = await requireOrderOperator();
 
   const where = buildAdminOrderWhere(filters);
@@ -609,6 +632,22 @@ export async function getAdminOrdersWorkQueueData(filters: AdminOrderFilters) {
       filters.sort === "priority" ? right.priorityScore - left.priorityScore : 0
     );
   const exactOverdue = exactOverdueCandidates.length;
+  const selectedRecord = selectedOrderReference
+    ? records.find(
+        (order) =>
+          order.id === selectedOrderReference ||
+          order.orderNumber === selectedOrderReference
+      ) ||
+      (await prisma.order.findFirst({
+        where: {
+          OR: [
+            { id: selectedOrderReference },
+            { orderNumber: selectedOrderReference },
+          ],
+        },
+        select: orderListSelect,
+      }))
+    : null;
 
   return {
     operatorRole: operator.role,
@@ -628,6 +667,9 @@ export async function getAdminOrdersWorkQueueData(filters: AdminOrderFilters) {
     },
     filters,
     orders,
+    selectedOrder: selectedRecord
+      ? mapAdminOrderListItem(selectedRecord, policies, now)
+      : null,
     options: {
       cities: cities.map((item) => item.shippingCity).filter((value): value is string => Boolean(value)),
       carriers: carriers.map((item) => item.deliveryCompany).filter((value): value is string => Boolean(value)),

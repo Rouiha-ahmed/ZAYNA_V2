@@ -1727,18 +1727,24 @@ export async function updatePromoCodeAction(formData: FormData) {
 }
 
 export async function deletePromoCodeAction(formData: FormData) {
-  return withAction("promos", "Impossible de supprimer ce code promo.", async () => {
+  return withAction("promos", "Impossible d'archiver ce code promo.", async () => {
+    const identity = await requireAdmin();
     const id = requireId(readText(formData, "id"), "Code promo introuvable.");
 
-    await prisma.promoCode.delete({
+    await prisma.promoCode.update({
       where: {
         id,
+      },
+      data: {
+        active: false,
+        archivedAt: new Date(),
+        archivedBy: identity.userId || identity.email || "admin",
       },
     });
 
     refreshStorefront();
     adminRedirect("promos", {
-      status: "Code promo supprime.",
+      status: "Code promo archive. L'historique est conserve.",
     });
   });
 }

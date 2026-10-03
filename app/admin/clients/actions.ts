@@ -226,38 +226,29 @@ export async function updateLoyaltySettingsAction(
       .filter((value) => Number.isInteger(value) && value > 0 && value <= 365)
       .sort((a, b) => b - a);
     if (!alertDays.length) throw new Error("Ajoutez au moins un délai d’alerte valide.");
+    const settingsData = {
+      statusValidityMonths: readInt(formData, "statusValidityMonths", 1, 120),
+      pointExpirationMonths: readInt(formData, "pointExpirationMonths", 1, 120),
+      expirationAlertDays: alertDays,
+      separateStatusAndPoints: formData.get("separateStatusAndPoints") === "on",
+      newCustomerDays: readInt(formData, "newCustomerDays", 1, 365),
+      activeCustomerDays: readInt(formData, "activeCustomerDays", 1, 730),
+      inactiveCustomerDays: readInt(formData, "inactiveCustomerDays", 30, 3_650),
+      loyalMinimumOrders: readInt(formData, "loyalMinimumOrders", 1, 1_000),
+      loyalMinimumRevenue: readNumber(formData, "loyalMinimumRevenue", 0, 100_000_000),
+      reengagementCycleMultiplier: readNumber(formData, "reengagementCycleMultiplier", 1, 10),
+      minimumOrdersForCycle: readInt(formData, "minimumOrdersForCycle", 2, 100),
+    };
 
     await prisma.$transaction(async (tx) => {
-      const before = await tx.loyaltyProgramSettings.findUnique({ where: { id: "default" } });
+      const [before, tiersBefore] = await Promise.all([
+        tx.loyaltyProgramSettings.findUnique({ where: { id: "default" } }),
+        tx.loyaltyTierRule.findMany({ orderBy: { revenueThreshold: "asc" } }),
+      ]);
       await tx.loyaltyProgramSettings.upsert({
         where: { id: "default" },
-        create: {
-          id: "default",
-          statusValidityMonths: readInt(formData, "statusValidityMonths", 1, 120),
-          pointExpirationMonths: readInt(formData, "pointExpirationMonths", 1, 120),
-          expirationAlertDays: alertDays,
-          separateStatusAndPoints: formData.get("separateStatusAndPoints") === "on",
-          newCustomerDays: readInt(formData, "newCustomerDays", 1, 365),
-          activeCustomerDays: readInt(formData, "activeCustomerDays", 1, 730),
-          inactiveCustomerDays: readInt(formData, "inactiveCustomerDays", 30, 3_650),
-          loyalMinimumOrders: readInt(formData, "loyalMinimumOrders", 1, 1_000),
-          loyalMinimumRevenue: readNumber(formData, "loyalMinimumRevenue", 0, 100_000_000),
-          reengagementCycleMultiplier: readNumber(formData, "reengagementCycleMultiplier", 1, 10),
-          minimumOrdersForCycle: readInt(formData, "minimumOrdersForCycle", 2, 100),
-        },
-        update: {
-          statusValidityMonths: readInt(formData, "statusValidityMonths", 1, 120),
-          pointExpirationMonths: readInt(formData, "pointExpirationMonths", 1, 120),
-          expirationAlertDays: alertDays,
-          separateStatusAndPoints: formData.get("separateStatusAndPoints") === "on",
-          newCustomerDays: readInt(formData, "newCustomerDays", 1, 365),
-          activeCustomerDays: readInt(formData, "activeCustomerDays", 1, 730),
-          inactiveCustomerDays: readInt(formData, "inactiveCustomerDays", 30, 3_650),
-          loyalMinimumOrders: readInt(formData, "loyalMinimumOrders", 1, 1_000),
-          loyalMinimumRevenue: readNumber(formData, "loyalMinimumRevenue", 0, 100_000_000),
-          reengagementCycleMultiplier: readNumber(formData, "reengagementCycleMultiplier", 1, 10),
-          minimumOrdersForCycle: readInt(formData, "minimumOrdersForCycle", 2, 100),
-        },
+        create: { id: "default", ...settingsData },
+        update: settingsData,
       });
       for (const rule of rules) {
         await tx.loyaltyTierRule.upsert({
@@ -273,7 +264,9 @@ export async function updateLoyaltySettingsAction(
         entityId: "default",
         metadata: {
           before: before ? JSON.parse(JSON.stringify(before)) : null,
-          tiers: rules,
+          after: settingsData,
+          tiersBefore: JSON.parse(JSON.stringify(tiersBefore)),
+          tiersAfter: rules,
         },
       });
     });
@@ -317,6 +310,7 @@ export async function saveRewardAction(
       isActive: formData.get("isActive") === "on",
     };
     await prisma.$transaction(async (tx) => {
+      const before = id ? await tx.loyaltyReward.findUnique({ where: { id } }) : null;
       const reward = id
         ? await tx.loyaltyReward.update({ where: { id }, data })
         : await tx.loyaltyReward.create({ data });
@@ -325,7 +319,13 @@ export async function saveRewardAction(
         action: id ? "loyalty.reward_updated" : "loyalty.reward_created",
         entity: "LoyaltyReward",
         entityId: reward.id,
-        metadata: { name, pointsCost, type },
+        metadata: {
+          name,
+          pointsCost,
+          type,
+          before: before ? JSON.parse(JSON.stringify(before)) : null,
+          after: JSON.parse(JSON.stringify(reward)),
+        },
       });
     });
     refreshCustomers();
@@ -339,12 +339,13 @@ export async function archiveRewardAction(formData: FormData) {
   const actor = await getActor();
   const id = readText(formData, "id");
   await prisma.$transaction(async (tx) => {
-    await tx.loyaltyReward.update({ where: { id }, data: { isActive: false, archivedAt: new Date() } });
+    const reward = await tx.loyaltyReward.update({ where: { id }, data: { isActive: false, archivedAt: new Date() } });
     await writeAuditLog(tx, {
       actor,
       action: "loyalty.reward_archived",
       entity: "LoyaltyReward",
       entityId: id,
+      metadata: { name: reward.name },
     });
   });
   refreshCustomers();

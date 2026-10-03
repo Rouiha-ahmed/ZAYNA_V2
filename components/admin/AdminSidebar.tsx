@@ -97,7 +97,7 @@ export const buildAdminSidebarItems = (metrics: {
     label: "Codes promo",
     description: "Remises actives, expirations et campagnes",
     href: "/admin/promos",
-    actionHref: "/admin/promos#new-promo",
+    actionHref: "/admin/promos?drawer=create",
     actionLabel: "Creer une promo",
     icon: Percent,
     badge: metrics.expiringPromoCodes || undefined,
