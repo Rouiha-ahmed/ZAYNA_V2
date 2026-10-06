@@ -17,6 +17,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:backfill:homepage": "tsx prisma/backfill-homepage-sections.ts",
     "import:heypara": "tsx scripts/import-heypara.ts",
+    "import:catalogue-xlsx": "tsx scripts/replace-catalogue-from-xlsx.ts",
+    "db:backfill:categories": "tsx scripts/backfill-product-categories.ts",
     "db:setup": "npm run db:generate && npm run db:migrate && npm run db:seed",
     "db:studio": "prisma studio"
   },

@@ -198,7 +198,7 @@ function CategoryDrawerForm({
           id={`category-image-${category?.id || "new"}`}
           name="imageFile"
           label={category?.imageUrl ? "Remplacer l’image" : "Image de catégorie"}
-          helper="Image optimisée automatiquement. Une image est recommandée pour la Homepage."
+          helper="Image facultative. Sans image, la Homepage affiche automatiquement l’icône de la catégorie."
           existingImageUrls={category?.imageUrl ? [resolveImageUrl(category.imageUrl)] : []}
           maxFiles={1}
         />
@@ -213,7 +213,7 @@ function CategoryDrawerForm({
           <input type="checkbox" name="isActive" defaultChecked={category?.isActive ?? true} className="h-5 w-5 accent-emerald-600" />
         </label>
         <label className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-          <span><strong className="block text-sm text-slate-900">Afficher sur la Homepage</strong><span className="text-xs text-slate-500">Indépendant de la visibilité boutique.</span></span>
+          <span><strong className="block text-sm text-slate-900">Afficher sur la Homepage</strong><span className="text-xs text-slate-500">Effet immédiat dans la section Catégories si la catégorie est active et non archivée.</span></span>
           <input type="checkbox" name="isFeatured" defaultChecked={category?.isFeatured ?? false} className="h-5 w-5 accent-emerald-600" />
         </label>
         {category ? (

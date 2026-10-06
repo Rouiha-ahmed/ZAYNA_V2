@@ -31,6 +31,43 @@ export const findSimilarCategory = <T extends Pick<CategoryPlacementRecord, "id"
   );
 };
 
+export function resolveCategoryFlagUpdate(
+  current: { isActive: boolean; featured: boolean },
+  requested: { isActive?: boolean; isFeatured?: boolean },
+) {
+  const nextIsActive = requested.isActive ?? current.isActive;
+  const nextIsFeatured = requested.isActive === false
+    ? false
+    : requested.isFeatured ?? current.featured;
+
+  if (nextIsFeatured && !nextIsActive) {
+    throw new Error("Activez d’abord la catégorie avant de l’afficher sur la Homepage.");
+  }
+
+  return {
+    data: {
+      ...(typeof requested.isActive === "boolean"
+        ? { isActive: requested.isActive }
+        : {}),
+      ...(typeof requested.isFeatured === "boolean"
+        ? { featured: requested.isFeatured }
+        : {}),
+      ...(requested.isActive === false ? { featured: false } : {}),
+    },
+    audit: {
+      ...(typeof requested.isActive === "boolean"
+        ? { isActive: requested.isActive }
+        : {}),
+      ...(typeof requested.isFeatured === "boolean"
+        ? { isFeatured: nextIsFeatured }
+        : {}),
+      ...(requested.isActive === false ? { isFeatured: false } : {}),
+    },
+    nextIsActive,
+    nextIsFeatured,
+  };
+}
+
 export function validateCategoryPlacement({
   categoryId,
   parentId,
@@ -110,7 +147,7 @@ export const getPotentialCategoryDuplicateGroups = <
 };
 
 export async function getAdminCategoriesData(): Promise<AdminCategoriesData> {
-  const [rows, activeCategories, featuredCategories, emptyCategories, uncategorizedProducts] =
+  const [rows, activeCategories, featuredCategories, uncategorizedProducts] =
     await Promise.all([
       prisma.category.findMany({
         orderBy: [{ parentId: "asc" }, { range: "asc" }, { title: "asc" }],
@@ -139,7 +176,6 @@ export async function getAdminCategoriesData(): Promise<AdminCategoriesData> {
       prisma.category.count({
         where: { archivedAt: null, isActive: true, featured: true },
       }),
-      prisma.category.count({ where: { archivedAt: null, products: { none: {} } } }),
       prisma.product.count({
         where: {
           isActive: true,
@@ -149,6 +185,23 @@ export async function getAdminCategoriesData(): Promise<AdminCategoriesData> {
         },
       }),
     ]);
+
+  const categoryRelations = await prisma.productCategory.findMany({
+    where: { categoryId: { in: rows.map((row) => row.id) } },
+    select: { categoryId: true, productId: true },
+  });
+  const productIdsByCategory = new Map<string, Set<string>>();
+  for (const relation of categoryRelations) {
+    const direct = productIdsByCategory.get(relation.categoryId) || new Set<string>();
+    direct.add(relation.productId);
+    productIdsByCategory.set(relation.categoryId, direct);
+    const parentId = rows.find((row) => row.id === relation.categoryId)?.parentId;
+    if (parentId) {
+      const parent = productIdsByCategory.get(parentId) || new Set<string>();
+      parent.add(relation.productId);
+      productIdsByCategory.set(parentId, parent);
+    }
+  }
 
   const riskCounts = await Promise.all(
     rows.map(async (row) => {
@@ -190,7 +243,7 @@ export async function getAdminCategoriesData(): Promise<AdminCategoriesData> {
     archivedAt: row.archivedAt,
     archivedBy: row.archivedBy,
     updatedAt: row.updatedAt,
-    productCount: row._count.products,
+    productCount: productIdsByCategory.get(row.id)?.size || 0,
     orphanRiskCount: riskCounts[index] || 0,
     products: row.products.map(({ product }) => product),
   }));
@@ -200,7 +253,9 @@ export async function getAdminCategoriesData(): Promise<AdminCategoriesData> {
       totalCategories: rows.filter((row) => !row.archivedAt).length,
       activeCategories,
       featuredCategories,
-      emptyCategories,
+      emptyCategories: rows.filter(
+        (row) => !row.archivedAt && !(productIdsByCategory.get(row.id)?.size),
+      ).length,
       uncategorizedProducts,
       archivedCategories: rows.filter((row) => Boolean(row.archivedAt)).length,
     },

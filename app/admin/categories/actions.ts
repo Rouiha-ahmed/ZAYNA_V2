@@ -11,6 +11,7 @@ import {
 } from "@/lib/admin-media";
 import {
   findSimilarCategory,
+  resolveCategoryFlagUpdate,
   validateCategoryPlacement,
   type CategoryPlacementRecord,
 } from "@/lib/categories";
@@ -115,6 +116,12 @@ export async function saveCategoryAction(
   if (title.length > 100) return failure("Le nom est limité à 100 caractères.", revision);
   if (description && description.length > 500) {
     return failure("La description est limitée à 500 caractères.", revision);
+  }
+  if (isFeatured && !isActive) {
+    return failure(
+      "Activez la catégorie avant de l’afficher sur la Homepage.",
+      revision,
+    );
   }
 
   const [allCategories, existing] = await Promise.all([
@@ -241,7 +248,13 @@ export async function setCategoryFlagsAction(
   try {
     const category = await prisma.category.findUnique({
       where: { id },
-      select: { slug: true, archivedAt: true, parentId: true },
+      select: {
+        slug: true,
+        archivedAt: true,
+        parentId: true,
+        isActive: true,
+        featured: true,
+      },
     });
     if (!category) throw new Error("Cette catégorie n’existe plus.");
     if (category.archivedAt) throw new Error("Désarchivez la catégorie avant de la modifier.");
@@ -256,9 +269,12 @@ export async function setCategoryFlagsAction(
       }
     }
 
+    const resolved = resolveCategoryFlagUpdate(category, values);
+    const updateData: Prisma.CategoryUpdateInput = resolved.data;
+
     await prisma.$transaction(async (tx) => {
-      await tx.category.update({ where: { id }, data: values });
-      await audit(tx, identity, "category.flags_updated", id, values);
+      await tx.category.update({ where: { id }, data: updateData });
+      await audit(tx, identity, "category.flags_updated", id, resolved.audit);
     });
     refreshCategories([category.slug]);
     return success("Statut mis à jour.");

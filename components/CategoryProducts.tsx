@@ -18,6 +18,9 @@ interface Props {
 
 const CategoryProducts = ({ categories, slug, initialProducts = [] }: Props) => {
   const [currentSlug, setCurrentSlug] = useState(slug);
+  const [products, setProducts] = useState(initialProducts);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(initialProducts.length === 60);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -38,7 +41,30 @@ const CategoryProducts = ({ categories, slug, initialProducts = [] }: Props) => 
 
   useEffect(() => {
     setCurrentSlug(slug);
-  }, [slug]);
+    setProducts(initialProducts);
+    setHasMore(initialProducts.length === 60);
+  }, [initialProducts, slug]);
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const params = new URLSearchParams({
+        categories: slug,
+        limit: "60",
+        page: String(Math.floor(products.length / 60)),
+      });
+      const response = await fetch(`/api/products/search?${params.toString()}`);
+      if (!response.ok) throw new Error(`Failed: ${response.status}`);
+      const nextProducts = (await response.json()) as Product[];
+      setProducts((current) => [...current, ...nextProducts]);
+      setHasMore(nextProducts.length === 60);
+    } catch (error) {
+      console.error("Category pagination error", error);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const showInlineLoading = isPending || currentSlug !== slug;
 
@@ -96,17 +122,32 @@ const CategoryProducts = ({ categories, slug, initialProducts = [] }: Props) => 
           </div>
         )}
 
-        {initialProducts.length > 0 ? (
-          <div
-            className={cn(
-              "grid grid-cols-2 gap-3 transition-opacity sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5",
-              showInlineLoading ? "opacity-50" : "opacity-100"
+        {products.length > 0 ? (
+          <>
+            <div
+              className={cn(
+                "grid grid-cols-2 gap-3 transition-opacity sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5",
+                showInlineLoading ? "opacity-50" : "opacity-100"
+              )}
+            >
+              {products.map((product) => (
+                <ProductCard key={product._id} product={product} />
+              ))}
+            </div>
+            {hasMore && (
+              <div className="mt-8 flex justify-center">
+                <button
+                  type="button"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="inline-flex min-w-40 items-center justify-center gap-2 rounded-full bg-shop_btn_dark_green px-6 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {loadingMore && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Charger plus
+                </button>
+              </div>
             )}
-          >
-            {initialProducts.map((product) => (
-              <ProductCard key={product._id} product={product} />
-            ))}
-          </div>
+          </>
         ) : (
           <NoProductAvailable selectedTab={currentSlug} className="mt-0 w-full" />
         )}

@@ -23,6 +23,8 @@ interface Props {
   initialSearchTerm?: string;
 }
 
+const PAGE_SIZE = 60;
+
 const getShopCacheKey = ({
   selectedCategories,
   selectedBrands,
@@ -83,17 +85,24 @@ const Shop = ({
   const cacheRef = useRef(new Map<string, Product[]>([[initialCacheKey, initialProducts]]));
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(initialProducts.length === PAGE_SIZE);
   const requestIdRef = useRef(0);
 
   const cacheKey = getShopCacheKey({ selectedCategories, selectedBrands, selectedPrice, searchTerm, sortBy });
 
-  useEffect(() => { setSelectedCategories(initCategories); }, [initialSelectedCategory]);
-  useEffect(() => { setSelectedBrands(initBrands); }, [initialSelectedBrand]);
+  useEffect(() => {
+    setSelectedCategories(initialSelectedCategory ? [initialSelectedCategory] : []);
+  }, [initialSelectedCategory]);
+  useEffect(() => {
+    setSelectedBrands(initialSelectedBrand ? [initialSelectedBrand] : []);
+  }, [initialSelectedBrand]);
   useEffect(() => { setSelectedPrice(initialSelectedPrice); }, [initialSelectedPrice]);
 
   useEffect(() => {
     cacheRef.current.set(initialCacheKey, initialProducts);
     setProducts(initialProducts);
+    setHasMore(initialProducts.length === PAGE_SIZE);
     setLoading(false);
   }, [initialCacheKey, initialProducts]);
 
@@ -101,6 +110,7 @@ const Shop = ({
     const cached = cacheRef.current.get(cacheKey);
     if (cached) {
       setProducts(cached);
+      setHasMore(cached.length === PAGE_SIZE);
       setLoading(false);
       return;
     }
@@ -116,6 +126,8 @@ const Shop = ({
       if (selectedBrands.length) params.set("brands", selectedBrands.join(","));
       if (searchTerm) params.set("q", searchTerm);
       if (sortBy && sortBy !== "relevance") params.set("sort", sortBy);
+      params.set("limit", String(PAGE_SIZE));
+      params.set("page", "0");
       if (minPrice !== null && maxPrice !== null) {
         params.set("minPrice", String(minPrice));
         params.set("maxPrice", String(maxPrice));
@@ -133,6 +145,7 @@ const Shop = ({
       if (requestIdRef.current === requestId) {
         cacheRef.current.set(cacheKey, data || []);
         setProducts(data || []);
+        setHasMore((data || []).length === PAGE_SIZE);
       }
     } catch (error) {
       if (requestIdRef.current === requestId) {
@@ -143,6 +156,34 @@ const Shop = ({
       if (requestIdRef.current === requestId) setLoading(false);
     }
   }, [cacheKey, searchTerm, selectedBrands, selectedCategories, selectedPrice, sortBy]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const { minPrice, maxPrice } = parsePriceRange(selectedPrice);
+      const params = new URLSearchParams();
+      if (selectedCategories.length) params.set("categories", selectedCategories.join(","));
+      if (selectedBrands.length) params.set("brands", selectedBrands.join(","));
+      if (searchTerm) params.set("q", searchTerm);
+      if (sortBy && sortBy !== "relevance") params.set("sort", sortBy);
+      if (minPrice !== null && maxPrice !== null) {
+        params.set("minPrice", String(minPrice));
+        params.set("maxPrice", String(maxPrice));
+      }
+      params.set("limit", String(PAGE_SIZE));
+      params.set("page", String(Math.floor(products.length / PAGE_SIZE)));
+      const response = await fetch(`/api/products/search?${params.toString()}`);
+      if (!response.ok) throw new Error(`Failed: ${response.status}`);
+      const nextProducts = (await response.json()) as Product[];
+      setProducts((current) => [...current, ...nextProducts]);
+      setHasMore(nextProducts.length === PAGE_SIZE);
+    } catch (error) {
+      console.error("Shop pagination error", error);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [hasMore, loadingMore, products.length, searchTerm, selectedBrands, selectedCategories, selectedPrice, sortBy]);
 
   useEffect(() => { fetchProducts(); }, [fetchProducts]);
 
@@ -283,6 +324,19 @@ const Shop = ({
                       <ProductCard key={product._id} product={product} />
                     ))}
                   </div>
+                  {hasMore && (
+                    <div className="mt-8 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={loadMore}
+                        disabled={loadingMore}
+                        className="inline-flex min-w-40 items-center justify-center gap-2 rounded-full bg-shop_btn_dark_green px-6 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                      >
+                        {loadingMore && <Loader2 className="h-4 w-4 animate-spin" />}
+                        Charger plus
+                      </button>
+                    </div>
+                  )}
                 </>
               ) : (
                 <NoProductAvailable className="bg-white mt-0" />

@@ -140,6 +140,12 @@ model Product {
   promotionEndsAt             DateTime?
   archivedAt                  DateTime?
   archivedBy                  String?
+  sourceName                  String?
+  sourceProductId             String?
+  sourceVariantId             String?
+  sourceSku                   String?
+  sourceUrl                   String?
+  sourceAvailable             Boolean?
   homepageProductSectionItems HomepageProductSectionItem[]
   homepageSections            HomepageSectionProduct[]
   inventoryMovements          InventoryMovement[]
@@ -152,6 +158,7 @@ model Product {
   tags                        ProductTag[]
   variants                    ProductVariant[]
 
+  @@unique([sourceName, sourceProductId])
   @@index([name])
   @@index([sku])
   @@index([brandId])
@@ -161,6 +168,7 @@ model Product {
   @@index([lifecycleStatus, updatedAt])
   @@index([archivedAt])
   @@index([isPromotion, promotionStartsAt, promotionEndsAt])
+  @@index([sourceSku])
   @@index([barcode(ops: raw("gin_trgm_ops"))], map: "Product_barcode_trgm_idx", type: Gin)
   @@index([name(ops: raw("gin_trgm_ops"))], map: "Product_name_trgm_idx", type: Gin)
   @@index([sku(ops: raw("gin_trgm_ops"))], map: "Product_sku_trgm_idx", type: Gin)

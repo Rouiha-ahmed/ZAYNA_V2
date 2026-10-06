@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import {
   getAllCategorySlugs,
   getCategories,
-  getProductsByCategorySlug,
+  searchProducts,
 } from "@/lib/queries";
 export const revalidate = 300;
 
@@ -21,7 +21,7 @@ const CategoryPage = async ({
   const { slug } = await params;
   const [categories, initialProducts] = await Promise.all([
     getCategories(),
-    getProductsByCategorySlug(slug),
+    searchProducts({ selectedCategory: slug, limit: 60 }),
   ]);
 
   const currentCategory = categories.find((c) => c.slug?.current === slug);

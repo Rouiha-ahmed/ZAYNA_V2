@@ -43,6 +43,7 @@ const ShopPage = async ({
       searchTerm: initialSearchTerm || undefined,
       minPrice: hasPriceFilter ? parsedMinPrice : null,
       maxPrice: hasPriceFilter ? parsedMaxPrice : null,
+      limit: 60,
     }),
   ]);
 
@@ -62,4 +63,3 @@ const ShopPage = async ({
 };
 
 export default ShopPage;
-

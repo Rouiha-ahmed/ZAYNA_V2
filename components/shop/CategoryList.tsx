@@ -39,6 +39,7 @@ const CategoryList = ({ categories, selectedCategories, onToggle, onReset }: Pro
               onClick={() => onToggle(slug)}
               className={cn(
                 "flex w-full items-center gap-2.5 rounded-[12px] px-3 py-2 text-left text-sm capitalize transition-all duration-150",
+                category.parentId && "pl-8",
                 isChecked
                   ? "bg-shop_btn_dark_green/10 text-shop_btn_dark_green font-semibold"
                   : "text-lightColor hover:bg-slate-50 hover:text-shop_dark_green font-medium"
@@ -60,7 +61,10 @@ const CategoryList = ({ categories, selectedCategories, onToggle, onReset }: Pro
                 )}
               </span>
               <Icon className={cn("h-3.5 w-3.5 shrink-0", isChecked ? "text-shop_light_green" : "text-slate-400")} />
-              <span className="truncate">{category.title}</span>
+              <span className="truncate">
+                {category.parentId ? "↳ " : ""}
+                {category.title}
+              </span>
             </button>
           );
         })}

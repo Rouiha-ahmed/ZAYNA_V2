@@ -5,7 +5,7 @@ import { Product } from "@/types";
 import { getDealProducts } from "@/lib/queries";
 import React from "react";
 
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 const DealPage = async () => {
   const products = await getDealProducts();
@@ -26,4 +26,3 @@ const DealPage = async () => {
 };
 
 export default DealPage;
-

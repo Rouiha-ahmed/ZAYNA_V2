@@ -633,7 +633,7 @@ const normalizeHomepageSectionConfig = (
 
   if (sectionType === "category_list") {
     return {
-      featuredOnly: asConfigBoolean(rawConfig, "featuredOnly", false),
+      featuredOnly: true,
     };
   }
 

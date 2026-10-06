@@ -160,6 +160,7 @@ const productOperationsSelect = {
           isActive: true,
           archivedAt: true,
           parentId: true,
+          parent: { select: { title: true } },
         },
       },
     },
@@ -193,6 +194,7 @@ const isPrimaryImageResolvable = async (url: string | null | undefined) => {
 
 export const buildProductSearchWhere = (
   filters: AdminProductFilters,
+  categoryScopeIds?: string[],
 ): Prisma.ProductWhereInput => {
   const clauses: Prisma.ProductWhereInput[] = [];
   if (filters.query) {
@@ -227,7 +229,15 @@ export const buildProductSearchWhere = (
       categories: { none: { category: { isActive: true, archivedAt: null } } },
     });
   else if (filters.categoryId)
-    clauses.push({ categories: { some: { categoryId: filters.categoryId } } });
+    clauses.push({
+      categories: {
+        some: {
+          categoryId: {
+            in: categoryScopeIds?.length ? categoryScopeIds : [filters.categoryId],
+          },
+        },
+      },
+    });
   return clauses.length ? { AND: clauses } : {};
 };
 
@@ -283,7 +293,10 @@ const mapRecord = (
     updatedAt: record.updatedAt.toISOString(),
     brandId: record.brandId,
     brandTitle: record.brand?.title || null,
-    categories: activeCategories.map(({ id, title }) => ({ id, title })),
+    categories: activeCategories.map(({ id, title, parent }) => ({
+      id,
+      title: parent ? `${parent.title} > ${title}` : title,
+    })),
     primaryImageUrl,
     imageCount: record._count.images,
     variantCount: record._count.variants,
@@ -386,8 +399,24 @@ export async function getAdminProductsOperationsData(
 ) {
   await requireAdmin();
   const now = new Date();
+  const categoryScopeIds =
+    filters.categoryId && filters.categoryId !== "unassigned"
+      ? (
+          await prisma.category.findMany({
+            where: {
+              archivedAt: null,
+              isActive: true,
+              OR: [
+                { id: filters.categoryId },
+                { parentId: filters.categoryId },
+              ],
+            },
+            select: { id: true },
+          })
+        ).map((category) => category.id)
+      : undefined;
   const records = await prisma.product.findMany({
-    where: buildProductSearchWhere(filters),
+    where: buildProductSearchWhere(filters, categoryScopeIds),
     select: productOperationsSelect,
   });
   const ids = records.map((record) => record.id);
@@ -503,6 +532,7 @@ export async function getAdminProductDetail(id: string) {
               isActive: true,
               archivedAt: true,
               parentId: true,
+              parent: { select: { title: true } },
             },
           },
         },
@@ -567,7 +597,9 @@ export async function getAdminProductDetail(id: string) {
     })),
     allCategories: record.categories.map(({ category }) => ({
       id: category.id,
-      title: category.title,
+      title: category.parent
+        ? `${category.parent.title} > ${category.title}`
+        : category.title,
       isActive: category.isActive,
       archivedAt: category.archivedAt?.toISOString() || null,
     })),

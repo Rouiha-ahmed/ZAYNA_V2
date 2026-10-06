@@ -114,10 +114,88 @@ const toCategory = (category: {
   range: number | null;
   featured: boolean;
   imageUrl: string | null;
+  parentId?: string | null;
   _count?: {
     products: number;
   };
 }) => mapCategory(category);
+
+export const homepageCategoryWhere = {
+  featured: true,
+  isActive: true,
+  archivedAt: null,
+  OR: [
+    { parentId: null },
+    { parent: { is: { isActive: true, archivedAt: null } } },
+  ],
+} satisfies Prisma.CategoryWhereInput;
+
+/**
+ * Category.featured is the single source of truth for Homepage membership.
+ * The Homepage workspace still owns presentation (title, order, layout and limit).
+ */
+export async function getFeaturedHomepageCategories(limit: number) {
+  const rows = await prisma.category.findMany({
+    where: homepageCategoryWhere,
+    orderBy: [{ range: "asc" }, { title: "asc" }],
+    take: limit,
+    select: {
+      id: true,
+      title: true,
+      slug: true,
+      description: true,
+      range: true,
+      featured: true,
+      imageUrl: true,
+      parentId: true,
+    },
+  });
+
+  const selectedIds = rows.map((category) => category.id);
+  const selectedRootIds = rows
+    .filter((category) => !category.parentId)
+    .map((category) => category.id);
+  const relations = selectedIds.length
+    ? await prisma.productCategory.findMany({
+        where: {
+          product: { is: sellableProductWhere },
+          OR: [
+            { categoryId: { in: selectedIds } },
+            ...(selectedRootIds.length
+              ? [{ category: { parentId: { in: selectedRootIds } } }]
+              : []),
+          ],
+        },
+        select: {
+          productId: true,
+          categoryId: true,
+          category: { select: { parentId: true } },
+        },
+      })
+    : [];
+
+  const productIdsByCategory = new Map<string, Set<string>>();
+  for (const relation of relations) {
+    if (selectedIds.includes(relation.categoryId)) {
+      const direct = productIdsByCategory.get(relation.categoryId) || new Set<string>();
+      direct.add(relation.productId);
+      productIdsByCategory.set(relation.categoryId, direct);
+    }
+    const parentId = relation.category.parentId;
+    if (parentId && selectedRootIds.includes(parentId)) {
+      const parent = productIdsByCategory.get(parentId) || new Set<string>();
+      parent.add(relation.productId);
+      productIdsByCategory.set(parentId, parent);
+    }
+  }
+
+  return rows.map((category) =>
+    toCategory({
+      ...category,
+      _count: { products: productIdsByCategory.get(category.id)?.size || 0 },
+    }),
+  );
+}
 
 const toProduct = (product: ProductRecord) => mapProduct(product);
 
@@ -484,94 +562,22 @@ export async function resolveDynamicHomepageSections({
     }
 
     if (section.type === "category_list") {
-      const categoryIds = Array.isArray(baseConfig.categoryIds)
-        ? baseConfig.categoryIds.filter((item): item is string => typeof item === "string")
-        : [];
-      const featuredOnly = Boolean(baseConfig.featuredOnly);
       const limit = clampLimit(section.limit, settings.featuredCategoriesLimit, 24);
-
-      let categories = [];
-
-      if (categoryIds.length) {
-        const rows = await prisma.category.findMany({
-          where: {
-            isActive: true,
-            archivedAt: null,
-            OR: [
-              { parentId: null },
-              { parent: { is: { isActive: true, archivedAt: null } } },
-            ],
-            id: {
-              in: categoryIds,
-            },
-          },
-          select: {
-            id: true,
-            title: true,
-            slug: true,
-            description: true,
-            range: true,
-            featured: true,
-            imageUrl: true,
-            _count: {
-              select: {
-                products: {
-                  where: { product: { is: sellableProductWhere } },
-                },
-              },
-            },
-          },
-        });
-        const byId = new Map(rows.map((item) => [item.id, item]));
-        categories = categoryIds
-          .map((id) => byId.get(id))
-          .filter((item): item is (typeof rows)[number] => Boolean(item))
-          .slice(0, limit)
-          .map(toCategory);
-      } else {
-        const rows = await prisma.category.findMany({
-          where: {
-            isActive: true,
-            archivedAt: null,
-            OR: [
-              { parentId: null },
-              { parent: { is: { isActive: true, archivedAt: null } } },
-            ],
-            ...(featuredOnly ? { featured: true } : {}),
-          },
-          orderBy: [{ range: "asc" }, { title: "asc" }],
-          select: {
-            id: true,
-            title: true,
-            slug: true,
-            description: true,
-            range: true,
-            featured: true,
-            imageUrl: true,
-            _count: {
-              select: {
-                products: {
-                  where: { product: { is: sellableProductWhere } },
-                },
-              },
-            },
-          },
-          take: limit,
-        });
-        categories = rows.map(toCategory);
-      }
+      const categories = await getFeaturedHomepageCategories(limit);
 
       if (!categories.length) {
         continue;
       }
+      const categoryConfig = { ...baseConfig };
+      delete categoryConfig.categoryIds;
 
       resolved.push({
         ...base,
         type: "category_list",
         categories,
         config: {
-          ...baseConfig,
-          featuredOnly,
+          ...categoryConfig,
+          featuredOnly: true,
           limit,
         },
       });

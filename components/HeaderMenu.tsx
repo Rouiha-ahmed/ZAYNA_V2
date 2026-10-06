@@ -59,7 +59,7 @@ const HeaderMenu = ({
   return (
     <nav
       className={cn(
-        "font-menu flex w-full min-w-0 items-center justify-between gap-1 text-sm font-extrabold tracking-[0.01em] text-white transition-all duration-300 ease-out",
+        "font-menu flex w-full min-w-0 flex-wrap items-center justify-start gap-1 text-sm font-extrabold tracking-[0.01em] text-white transition-all duration-300 ease-out",
         isSearchActive && "gap-1",
         className
       )}

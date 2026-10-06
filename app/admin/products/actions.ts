@@ -123,7 +123,7 @@ export async function saveProductAction(previous: ProductMutationState, formData
   if (brandId && !brand) return result(false, "La marque sélectionnée est inactive ou archivée.", revision);
   if (lifecycleStatus === "ACTIVE") {
     if (price <= 0) return result(false, "Un produit actif doit avoir un prix valide.", revision);
-    if (!categories.length) return result(false, "Un produit actif doit avoir au moins une catégorie active.", revision);
+    if (!categories.length) return result(false, "Une catégorie active est requise pour publier ce produit.", revision);
     if (!imageFiles.length && !existing?.images.length) return result(false, "Un produit actif doit avoir une image principale.", revision);
   }
 

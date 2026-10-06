@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   findSimilarCategory,
   normalizeCategoryName,
+  resolveCategoryFlagUpdate,
   validateCategoryPlacement,
 } from "../lib/categories";
 
@@ -17,6 +18,31 @@ const categories = [
 test("normalizes accents, punctuation, dashes and spacing for duplicate checks", () => {
   assert.equal(normalizeCategoryName("  Soins—Visagé  "), "soins visage");
   assert.equal(normalizeCategoryName("L’HYGIÈNE_dentaire"), "l hygiene dentaire");
+});
+
+test("Homepage flag writes the real Prisma field and rejects silent invalid states", () => {
+  assert.deepEqual(
+    resolveCategoryFlagUpdate(
+      { isActive: true, featured: false },
+      { isFeatured: true },
+    ).data,
+    { featured: true },
+  );
+  assert.deepEqual(
+    resolveCategoryFlagUpdate(
+      { isActive: true, featured: true },
+      { isActive: false },
+    ).data,
+    { isActive: false, featured: false },
+  );
+  assert.throws(
+    () =>
+      resolveCategoryFlagUpdate(
+        { isActive: false, featured: false },
+        { isFeatured: true },
+      ),
+    /Activez d’abord/,
+  );
 });
 
 test("finds equivalent names across active and archived records", () => {

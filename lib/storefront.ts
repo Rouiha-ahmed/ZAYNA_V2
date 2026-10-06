@@ -7,12 +7,16 @@ import { type HomepageDynamicSection } from "@/lib/homepage-sections";
 import { buildHomepageSnapshotShell } from "@/lib/homepage-preview";
 import { getPublishedHomepageRenderData } from "@/lib/homepage-workspace";
 import { sanitizePublicImageUrl } from "@/lib/image";
+import { flattenCompleteCategoryTrees } from "@/lib/navigation-menu";
 import { prisma } from "@/lib/prisma";
 import {
   activeProductPromotionWhere,
   sellableProductWhere,
 } from "@/lib/products/storefront-rules";
-import { buildDynamicHomepageSections } from "@/lib/storefront-homepage-builder";
+import {
+  buildDynamicHomepageSections,
+  getFeaturedHomepageCategories,
+} from "@/lib/storefront-homepage-builder";
 import {
   getStorefrontCustomHomepageProductSections,
   type StorefrontCustomHomepageProductSection,
@@ -495,8 +499,9 @@ const buildFallbackShellData = (): StorefrontShellData => ({
 });
 
 const fetchStorefrontShellData = async (): Promise<StorefrontShellData> => {
-  // Fetch settings, links, social links, and categories in ONE round-trip.
-  // Categories used for both nav (top 20) and footer (top 10) — one query, slice in JS.
+  // Fetch settings, links, social links, and categories in one round-trip.
+  // Navigation needs complete trees: limiting the flattened list can silently
+  // consume every slot with the first parents' children.
   const [settingsRecord, rawLinks, rawSocialLinks, allCategoriesRaw] =
     await Promise.all([
       prisma.storefrontSettings.findUnique({
@@ -544,14 +549,9 @@ const fetchStorefrontShellData = async (): Promise<StorefrontShellData> => {
       }),
     ]);
 
-  const navigationCategoriesRaw = allCategoriesRaw
-    .filter((category) => !category.parentId)
-    .flatMap((root) => [
-      root,
-      ...allCategoriesRaw.filter((category) => category.parentId === root.id),
-    ])
-    .slice(0, 20);
-  const footerCategoriesRaw = navigationCategoriesRaw.slice(0, 10);
+  const rootCategories = allCategoriesRaw.filter((category) => !category.parentId);
+  const navigationCategoriesRaw = flattenCompleteCategoryTrees(allCategoriesRaw);
+  const footerCategoriesRaw = rootCategories.slice(0, 10);
 
   const settings = normalizeSettings(settingsRecord);
   const activeLinks = rawLinks.filter((link) => link.isActive && !link.archivedAt);
@@ -670,35 +670,7 @@ const fetchStorefrontHomeData = async (): Promise<StorefrontHomeData> => {
       },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     }),
-    prisma.category.findMany({
-      where: {
-        featured: true,
-        isActive: true,
-        archivedAt: null,
-        OR: [
-          { parentId: null },
-          { parent: { is: { isActive: true, archivedAt: null } } },
-        ],
-      },
-      orderBy: [{ range: "asc" }, { title: "asc" }],
-      select: {
-        id: true,
-        title: true,
-        slug: true,
-        description: true,
-        range: true,
-        featured: true,
-        imageUrl: true,
-        _count: {
-          select: {
-            products: {
-              where: { product: { is: sellableProductWhere } },
-            },
-          },
-        },
-      },
-      take: settings.featuredCategoriesLimit,
-    }),
+    getFeaturedHomepageCategories(settings.featuredCategoriesLimit),
     prisma.product.findMany({
       where: {
         ...sellableProductWhere,
@@ -783,7 +755,7 @@ const fetchStorefrontHomeData = async (): Promise<StorefrontHomeData> => {
 
   const featuredCategories =
     featuredCategoriesRaw.length > 0
-      ? featuredCategoriesRaw.map(toCategory)
+      ? featuredCategoriesRaw
       : shell.navigationCategories
           .filter((category) => (category.productCount || 0) > 0)
           .slice(0, settings.featuredCategoriesLimit);

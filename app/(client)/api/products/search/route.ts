@@ -11,7 +11,11 @@ export async function GET(req: NextRequest) {
     const selectedBrands = brandsParam ? brandsParam.split(",").map((s) => s.trim()).filter(Boolean) : [];
 
     const q = params.get("q")?.trim() || "";
-    const limit = Number(params.get("limit") || "");
+    const requestedLimit = Number(params.get("limit") || "60");
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(100, Math.max(1, requestedLimit))
+      : 60;
+    const page = Math.max(0, Number.parseInt(params.get("page") || "0", 10) || 0);
     const sortBy = (params.get("sort") || "relevance") as SortOption;
 
     const minPriceParam = params.get("minPrice");
@@ -26,7 +30,8 @@ export async function GET(req: NextRequest) {
       searchTerm: q,
       minPrice: hasPriceFilter ? parsedMin : null,
       maxPrice: hasPriceFilter ? parsedMax : null,
-      limit: Number.isFinite(limit) && limit > 0 ? limit : undefined,
+      limit,
+      offset: page * limit,
       sortBy,
     });
 

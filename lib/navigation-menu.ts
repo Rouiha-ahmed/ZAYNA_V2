@@ -3,6 +3,16 @@ import type { Category } from "@/types";
 
 export type NavCategoryItem = Category & { slug: { current: string } };
 
+export const flattenCompleteCategoryTrees = <
+  T extends { id: string; parentId: string | null },
+>(categories: T[]) => {
+  const roots = categories.filter((category) => !category.parentId);
+  return roots.flatMap((root) => [
+    root,
+    ...categories.filter((category) => category.parentId === root.id),
+  ]);
+};
+
 const categoryOrderValue = (category: Category) => {
   const sortOrder = Number(category.sortOrder);
   if (Number.isFinite(sortOrder)) {

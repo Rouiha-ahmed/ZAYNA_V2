@@ -70,11 +70,11 @@ type SearchProductsInput = {
   minPrice?: number | null;
   maxPrice?: number | null;
   limit?: number;
+  offset?: number;
   sortBy?: SortOption;
 };
 
 const STOREFRONT_REVALIDATE = 300;
-const PRODUCT_SEARCH_REVALIDATE = 120;
 
 const VALID_SORT_OPTIONS: SortOption[] = ["relevance", "price_asc", "price_desc", "name_asc", "name_desc"];
 
@@ -88,6 +88,7 @@ const normalizeSearchProductsInput = ({
   minPrice,
   maxPrice,
   limit,
+  offset,
   sortBy,
 }: SearchProductsInput) => {
   const cats = selectedCategories?.filter(Boolean) || (selectedCategory?.trim() ? [selectedCategory.trim()] : []);
@@ -102,6 +103,7 @@ const normalizeSearchProductsInput = ({
     maxPrice:
       typeof maxPrice === "number" && Number.isFinite(maxPrice) ? maxPrice : null,
     limit: typeof limit === "number" && Number.isFinite(limit) && limit > 0 ? limit : null,
+    offset: typeof offset === "number" && Number.isFinite(offset) && offset > 0 ? offset : 0,
     sortBy: sortBy && VALID_SORT_OPTIONS.includes(sortBy) ? sortBy : ("relevance" as SortOption),
   };
 };
@@ -142,7 +144,31 @@ const getCachedCategories = unstable_cache(
       root,
       ...categories.filter((category) => category.parentId === root.id),
     ]);
-    return ordered.slice(0, quantity || undefined).map(mapCategory);
+    const relations = await prisma.productCategory.findMany({
+      where: {
+        categoryId: { in: categories.map((category) => category.id) },
+        product: { is: sellableProductWhere },
+      },
+      select: { categoryId: true, productId: true },
+    });
+    const productIdsByCategory = new Map<string, Set<string>>();
+    for (const relation of relations) {
+      const direct = productIdsByCategory.get(relation.categoryId) || new Set<string>();
+      direct.add(relation.productId);
+      productIdsByCategory.set(relation.categoryId, direct);
+      const parentId = categories.find((category) => category.id === relation.categoryId)?.parentId;
+      if (parentId) {
+        const parent = productIdsByCategory.get(parentId) || new Set<string>();
+        parent.add(relation.productId);
+        productIdsByCategory.set(parentId, parent);
+      }
+    }
+    return ordered.slice(0, quantity || undefined).map((category) =>
+      mapCategory({
+        ...category,
+        _count: { products: productIdsByCategory.get(category.id)?.size || 0 },
+      }),
+    );
   },
   ["storefront-categories"],
   { revalidate: STOREFRONT_REVALIDATE }
@@ -230,8 +256,7 @@ const getCachedAllBrands = unstable_cache(
   { revalidate: STOREFRONT_REVALIDATE }
 );
 
-const getCachedDealProducts = unstable_cache(
-  async (): Promise<Product[]> => {
+const getDealProductsFromDatabase = async (): Promise<Product[]> => {
     const products = await prisma.product.findMany({
       where: {
         ...sellableProductWhere,
@@ -244,11 +269,8 @@ const getCachedDealProducts = unstable_cache(
       select: productSelect,
     });
 
-    return products.map(mapProduct);
-  },
-  ["storefront-deals"],
-  { revalidate: STOREFRONT_REVALIDATE }
-);
+  return products.map(mapProduct);
+};
 
 const getCachedProductBySlug = unstable_cache(
   async (slug: string): Promise<Product | null> => {
@@ -284,34 +306,46 @@ const getCachedAllProductSlugs = unstable_cache(
   { revalidate: STOREFRONT_REVALIDATE }
 );
 
-const getCachedSearchProducts = unstable_cache(
-  async (input: ReturnType<typeof normalizeSearchProductsInput>): Promise<Product[]> => {
+const searchProductsInDatabase = async (
+  input: ReturnType<typeof normalizeSearchProductsInput>,
+): Promise<Product[]> => {
     const filters: Prisma.ProductWhereInput[] = [];
     const tokens = input.searchTerm
       .split(/\s+/)
       .map((token) => token.trim())
       .filter(Boolean);
 
-    if (input.selectedCategoryId) {
-      filters.push({
-        categories: {
-          some: {
-            categoryId: input.selectedCategoryId,
-            category: { isActive: true, archivedAt: null },
-          },
+    if (input.selectedCategoryId || input.selectedCategories.length > 0) {
+      const categoryScope = await prisma.category.findMany({
+        where: {
+          isActive: true,
+          archivedAt: null,
+          OR: [
+            ...(input.selectedCategoryId
+              ? [
+                  { id: input.selectedCategoryId },
+                  { parentId: input.selectedCategoryId },
+                ]
+              : []),
+            ...(input.selectedCategories.length
+              ? [
+                  { slug: { in: input.selectedCategories } },
+                  {
+                    parent: {
+                      is: { slug: { in: input.selectedCategories } },
+                    },
+                  },
+                ]
+              : []),
+          ],
         },
+        select: { id: true },
       });
-    }
-
-    if (input.selectedCategories.length > 0) {
       filters.push({
         categories: {
           some: {
-            category: {
-              slug: { in: input.selectedCategories },
-              isActive: true,
-              archivedAt: null,
-            },
+            categoryId: { in: categoryScope.map((category) => category.id) },
+            category: { isActive: true, archivedAt: null },
           },
         },
       });
@@ -367,15 +401,13 @@ const getCachedSearchProducts = unstable_cache(
         ...(filters.length ? { AND: filters } : {}),
       },
       orderBy,
+      skip: input.offset,
       take: input.limit || undefined,
       select: productSelect,
     });
 
-    return products.map(mapProduct);
-  },
-  ["storefront-search-products"],
-  { revalidate: PRODUCT_SEARCH_REVALIDATE }
-);
+  return products.map(mapProduct);
+};
 
 export const getCategories = async (
   quantity?: number,
@@ -397,7 +429,7 @@ export const getFooterCategories = async (
 
 export const getAllBrands = async (): Promise<BRANDS_QUERYResult> => getCachedAllBrands();
 
-export const getDealProducts = async (): Promise<Product[]> => getCachedDealProducts();
+export const getDealProducts = async (): Promise<Product[]> => getDealProductsFromDatabase();
 
 export const getProductBySlug = async (slug: string): Promise<Product | null> => {
   return getCachedProductBySlug(slug);
@@ -415,9 +447,10 @@ export const searchProducts = async ({
   minPrice,
   maxPrice,
   limit,
+  offset,
   sortBy,
 }: SearchProductsInput): Promise<Product[]> => {
-  return getCachedSearchProducts(
+  return searchProductsInDatabase(
     normalizeSearchProductsInput({
       selectedCategory,
       selectedCategories,
@@ -428,6 +461,7 @@ export const searchProducts = async ({
       minPrice,
       maxPrice,
       limit,
+      offset,
       sortBy,
     })
   );
