@@ -23,14 +23,14 @@ test("normalizes accents, punctuation, dashes and spacing for duplicate checks",
 test("Homepage flag writes the real Prisma field and rejects silent invalid states", () => {
   assert.deepEqual(
     resolveCategoryFlagUpdate(
-      { isActive: true, featured: false },
+      { isActive: true, featured: false, showInNavigation: false },
       { isFeatured: true },
     ).data,
     { featured: true },
   );
   assert.deepEqual(
     resolveCategoryFlagUpdate(
-      { isActive: true, featured: true },
+      { isActive: true, featured: true, showInNavigation: true },
       { isActive: false },
     ).data,
     { isActive: false, featured: false },
@@ -38,10 +38,27 @@ test("Homepage flag writes the real Prisma field and rejects silent invalid stat
   assert.throws(
     () =>
       resolveCategoryFlagUpdate(
-        { isActive: false, featured: false },
+        { isActive: false, featured: false, showInNavigation: false },
         { isFeatured: true },
       ),
     /Activez d’abord/,
+  );
+});
+
+test("navigation visibility is independent from catalogue and Homepage flags", () => {
+  assert.deepEqual(
+    resolveCategoryFlagUpdate(
+      { isActive: true, featured: true, showInNavigation: false },
+      { showInNavigation: true },
+    ).data,
+    { showInNavigation: true },
+  );
+  assert.deepEqual(
+    resolveCategoryFlagUpdate(
+      { isActive: true, featured: false, showInNavigation: true },
+      { isActive: false },
+    ).data,
+    { isActive: false, featured: false },
   );
 });
 

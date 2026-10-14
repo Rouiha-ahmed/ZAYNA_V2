@@ -4,11 +4,16 @@ import path from "node:path";
 
 import sharp from "sharp";
 
+import {
+  MAX_BRAND_LOGO_BYTES,
+  MAX_IMAGE_INPUT_PIXELS,
+  MAX_IMAGE_UPLOAD_BYTES,
+  validateProductImageBatch,
+} from "@/lib/upload-limits";
+
 export type UploadDirectory = "brands" | "products" | "categories" | "homepage";
 
 const IMAGE_ROOT = path.join(process.cwd(), "public", "static-assets");
-const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024;
-const MAX_BRAND_LOGO_BYTES = 2 * 1024 * 1024;
 const BRAND_LOGO_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const BRAND_LOGO_FORMATS = new Set(["png", "jpeg", "webp"]);
 
@@ -71,7 +76,10 @@ export const saveOptimizedImage = async (
   let metadata: Awaited<ReturnType<ReturnType<typeof sharp>["metadata"]>>;
 
   try {
-    metadata = await sharp(sourceBuffer).metadata();
+    metadata = await sharp(sourceBuffer, {
+      failOn: "warning",
+      limitInputPixels: MAX_IMAGE_INPUT_PIXELS,
+    }).metadata();
   } catch {
     throw new Error("Le fichier image est invalide ou endommage.");
   }
@@ -88,7 +96,7 @@ export const saveOptimizedImage = async (
     throw new Error("Le logo est trop petit. Utilisez une image d'au moins 32 x 16 px.");
   }
 
-  if (metadata.width * metadata.height > 40_000_000) {
+  if (metadata.width * metadata.height > MAX_IMAGE_INPUT_PIXELS) {
     throw new Error("Les dimensions de l'image sont trop importantes.");
   }
 
@@ -103,7 +111,10 @@ export const saveOptimizedImage = async (
   const rule = IMAGE_RULES[directory];
   const targetDirectory = path.join(IMAGE_ROOT, directory);
   const thumbnailsDirectory = path.join(targetDirectory, "thumbs");
-  const optimizedBuffer = await sharp(sourceBuffer)
+  const optimizedBuffer = await sharp(sourceBuffer, {
+    failOn: "warning",
+    limitInputPixels: MAX_IMAGE_INPUT_PIXELS,
+  })
     .rotate()
     .resize({
       width: rule.maxWidth,
@@ -186,4 +197,20 @@ export const deleteStoredAsset = async (url: string | null | undefined) => {
 
 export const deleteStoredAssets = async (urls: Array<string | null | undefined>) => {
   await Promise.all(urls.map((url) => deleteStoredAsset(url)));
+};
+
+export const saveOptimizedProductImages = async (files: File[], baseName: string) => {
+  validateProductImageBatch(files);
+  const saved: Awaited<ReturnType<typeof saveOptimizedImage>>[] = [];
+
+  try {
+    // Decode sequentially so six valid images cannot multiply peak libvips memory.
+    for (const file of files) {
+      saved.push(await saveOptimizedImage(file, "products", baseName));
+    }
+    return saved;
+  } catch (error) {
+    await deleteStoredAssets(saved.map((image) => image.url));
+    throw error;
+  }
 };

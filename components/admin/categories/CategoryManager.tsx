@@ -79,6 +79,7 @@ export type CategoryManagerItem = {
   sortOrder: number;
   isActive: boolean;
   isFeatured: boolean;
+  showInNavigation: boolean;
   archivedAt: string | null;
   archivedBy: string | null;
   updatedAt: string;
@@ -149,6 +150,7 @@ function CategoryDrawerForm({
   onSaved: (message: string) => void;
 }) {
   const [state, formAction, pending] = useActionState(saveCategoryAction, initialState);
+  const [parentId, setParentId] = useState(category?.parentId || "");
   useEffect(() => {
     if (state.success && state.revision) onSaved(state.message);
   }, [onSaved, state.message, state.revision, state.success]);
@@ -181,7 +183,8 @@ function CategoryDrawerForm({
           <span>Catégorie parente</span>
           <select
             name="parentId"
-            defaultValue={category?.parentId || ""}
+            value={parentId}
+            onChange={(event) => setParentId(event.target.value)}
             disabled={children.length > 0}
             className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-normal text-slate-700 disabled:opacity-60"
           >
@@ -209,13 +212,24 @@ function CategoryDrawerForm({
           </label>
         ) : null}
         <label className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-          <span><strong className="block text-sm text-slate-900">Visible sur la boutique</strong><span className="text-xs text-slate-500">Contrôle la navigation et les pages publiques.</span></span>
+          <span><strong className="block text-sm text-slate-900">Visible sur la boutique</strong><span className="text-xs text-slate-500">Rend la catégorie disponible dans le catalogue et sur ses pages publiques.</span></span>
           <input type="checkbox" name="isActive" defaultChecked={category?.isActive ?? true} className="h-5 w-5 accent-emerald-600" />
         </label>
         <label className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
           <span><strong className="block text-sm text-slate-900">Afficher sur la Homepage</strong><span className="text-xs text-slate-500">Effet immédiat dans la section Catégories si la catégorie est active et non archivée.</span></span>
           <input type="checkbox" name="isFeatured" defaultChecked={category?.isFeatured ?? false} className="h-5 w-5 accent-emerald-600" />
         </label>
+        {!parentId ? (
+          <label className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <span><strong className="block text-sm text-slate-900">Afficher dans la navigation principale</strong><span className="text-xs text-slate-500">Affiche cette catégorie dans le menu principal de la boutique.</span></span>
+            <input type="checkbox" name="showInNavigation" defaultChecked={category?.showInNavigation ?? false} className="h-5 w-5 accent-emerald-600" />
+          </label>
+        ) : (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <strong className="block text-sm text-slate-900">Navigation principale</strong>
+            <span className="text-xs text-slate-500">Cette sous-catégorie apparaît dans le menu de sa catégorie principale lorsqu’elle est active.</span>
+          </div>
+        )}
         {category ? (
           <div className="rounded-2xl border border-slate-200 p-4">
             <div className="flex items-center justify-between gap-3">
@@ -363,6 +377,7 @@ export default function CategoryManager({ data }: { data: CategoryManagerData })
       <td className="px-4 py-3"><Link href={`/admin/products?category=${encodeURIComponent(category.id)}`} className="font-semibold text-blue-700 hover:underline">{category.productCount} produit(s)</Link></td>
       <td className="px-4 py-3"><Toggle checked={category.isActive} disabled={Boolean(category.archivedAt) || pending} label={`Visibilité de ${category.title}`} onChange={() => runMutation(() => setCategoryFlagsAction(category.id, { isActive: !category.isActive }))} /></td>
       <td className="px-4 py-3"><Toggle checked={category.isFeatured} disabled={Boolean(category.archivedAt) || pending} label={`Homepage de ${category.title}`} onChange={() => runMutation(() => setCategoryFlagsAction(category.id, { isFeatured: !category.isFeatured }))} /></td>
+      <td className="px-4 py-3">{category.parentId ? <span className="whitespace-nowrap text-xs text-slate-500">Via le parent</span> : <Toggle checked={category.showInNavigation} disabled={Boolean(category.archivedAt) || pending} label={`Navigation de ${category.title}`} onChange={() => runMutation(() => setCategoryFlagsAction(category.id, { showInNavigation: !category.showInNavigation }))} />}</td>
       <td className="px-4 py-3 text-xs text-slate-500">{dateFormatter.format(new Date(category.updatedAt))}</td>
       <td className="px-4 py-3"><div className="flex justify-end gap-2">
         {category.archivedAt ? (category.archivedBy?.startsWith("system:commercial-collection") ? <span className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">Collection automatique</span> : <Button variant="outline" size="sm" onClick={() => runMutation(() => restoreCategoryAction(category.id))} className="rounded-xl"><ArchiveRestore className="h-4 w-4" />Désarchiver</Button>) : <>
@@ -384,13 +399,13 @@ export default function CategoryManager({ data }: { data: CategoryManagerData })
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{metricCards.map(({ key, label, icon: Icon, tone }) => <button type="button" key={key} onClick={() => { if (key === "featuredCategories") setTab("homepage"); else if (key === "emptyCategories") setTab("empty"); else if (key === "archivedCategories") setTab("archived"); }} className="rounded-[24px] border border-white/80 bg-white/95 p-4 text-left shadow-[0_20px_55px_-44px_rgba(15,23,42,.4)]"><div className="flex justify-between"><div><p className="text-xs font-semibold text-slate-500">{label}</p><p className="mt-2 text-2xl font-semibold text-slate-950">{numberFormatter.format(data.metrics[key])}</p></div><span className={cn("flex h-10 w-10 items-center justify-center rounded-2xl", tone)}><Icon className="h-4 w-4" /></span></div></button>)}</section>
       <section className="overflow-hidden rounded-[28px] border border-white/80 bg-white/95 shadow-[0_26px_80px_-56px_rgba(15,23,42,.42)]">
         <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between"><div className="flex flex-wrap gap-1">{([['all','Toutes',data.metrics.totalCategories],['homepage','Homepage',data.metrics.featuredCategories],['empty','Vides',data.metrics.emptyCategories],['archived','Archivées',data.metrics.archivedCategories]] as const).map(([value,label,count]) => <button key={value} type="button" onClick={() => setTab(value)} className={cn("rounded-xl px-3 py-2 text-sm font-semibold", tab === value ? "bg-blue-50 text-blue-800" : "text-slate-500 hover:bg-slate-50")}>{label} <span className="ml-1 rounded-full bg-white px-2 py-0.5 text-xs">{count}</span></button>)}</div><div className="relative w-full lg:max-w-sm"><Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher une catégorie…" className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-11" /></div></div>
-        {visibleRoots.length ? <div className="overflow-x-auto"><table className="w-full min-w-[940px] text-left text-sm"><thead className="bg-slate-50/80 text-[11px] uppercase tracking-[.12em] text-slate-500"><tr><th className="px-4 py-3">Catégorie</th><th className="px-4 py-3">Produits</th><th className="px-4 py-3">Active</th><th className="px-4 py-3">Homepage</th><th className="px-4 py-3">Mise à jour</th><th className="px-4 py-3 text-right">Actions</th></tr></thead><tbody>{visibleRoots.flatMap((root) => { const children = data.categories.filter((item) => item.parentId === root.id && matchesTab(item) && (!normalizedQuery || root.title.toLowerCase().includes(normalizedQuery) || item.title.toLowerCase().includes(normalizedQuery))).sort((a,b) => a.sortOrder-b.sortOrder); const rows = [renderRow(root)]; if (expanded.has(root.id) || normalizedQuery) rows.push(...children.map((child) => renderRow(child,1))); return rows; })}</tbody></table></div> : <div className="px-5 py-16 text-center"><FolderTree className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-4 font-semibold">Aucune catégorie trouvée</p><p className="mt-2 text-sm text-slate-500">Modifiez l’onglet ou la recherche.</p></div>}
+        {visibleRoots.length ? <div className="overflow-x-auto"><table className="w-full min-w-[1080px] text-left text-sm"><thead className="bg-slate-50/80 text-[11px] uppercase tracking-[.12em] text-slate-500"><tr><th className="px-4 py-3">Catégorie</th><th className="px-4 py-3">Produits</th><th className="px-4 py-3">Visible boutique</th><th className="px-4 py-3">Homepage</th><th className="px-4 py-3">Navigation</th><th className="px-4 py-3">Mise à jour</th><th className="px-4 py-3 text-right">Actions</th></tr></thead><tbody>{visibleRoots.flatMap((root) => { const children = data.categories.filter((item) => item.parentId === root.id && matchesTab(item) && (!normalizedQuery || root.title.toLowerCase().includes(normalizedQuery) || item.title.toLowerCase().includes(normalizedQuery))).sort((a,b) => a.sortOrder-b.sortOrder); const rows = [renderRow(root)]; if (expanded.has(root.id) || normalizedQuery) rows.push(...children.map((child) => renderRow(child,1))); return rows; })}</tbody></table></div> : <div className="px-5 py-16 text-center"><FolderTree className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-4 font-semibold">Aucune catégorie trouvée</p><p className="mt-2 text-sm text-slate-500">Modifiez l’onglet ou la recherche.</p></div>}
       </section>
       <section className="rounded-[24px] border border-blue-200 bg-blue-50/60 p-4 text-sm text-blue-900"><div className="flex gap-3"><Info className="mt-0.5 h-5 w-5 shrink-0" /><div><p className="font-semibold">Promotions, Best sellers et Nouveautés sont des collections automatiques.</p><p className="mt-1 text-xs leading-5 text-blue-700">Elles reposent sur les prix, les dates et les ventes réelles. Les anciennes catégories commerciales ont été archivées et leurs associations historiques conservées.</p>{data.duplicateGroups.length ? <p className="mt-2 text-xs font-semibold text-violet-700">Doublons potentiels à vérifier : {data.duplicateGroups.map((group) => group.map((item) => item.title).join(" / ")).join(" · ")}</p> : null}</div></div></section>
 
       <Dialog open={drawerOpen} onOpenChange={setDrawerOpen}><DialogContent className="!bottom-0 !left-auto !right-0 !top-0 flex !h-dvh !w-full !max-w-xl !translate-x-0 !translate-y-0 flex-col gap-0 !rounded-none border-y-0 border-r-0 border-l border-slate-200 p-0"><DialogHeader className="border-b border-slate-200 px-6 py-5 pr-14 sm:px-8"><DialogTitle>{drawerCategory ? `Modifier — ${drawerCategory.title}` : "Ajouter une catégorie"}</DialogTitle><DialogDescription>La hiérarchie est limitée à une catégorie principale et une sous-catégorie.</DialogDescription></DialogHeader>{drawerOpen ? <CategoryDrawerForm key={drawerCategory?.id || "new"} category={drawerCategory} categories={data.categories} onSaved={(message) => { setNotice(message); setDrawerOpen(false); window.location.reload(); }} /> : null}</DialogContent></Dialog>
       <Dialog open={Boolean(archiveTarget)} onOpenChange={(open) => !open && setArchiveTarget(null)}><DialogContent className="rounded-[26px] sm:max-w-md"><DialogHeader><DialogTitle>Archiver « {archiveTarget?.title} » ?</DialogTitle><DialogDescription className="leading-6">La catégorie ne sera plus visible. Ses associations produits restent intactes{archiveTarget && data.categories.some((item) => item.parentId === archiveTarget.id && !item.archivedAt) ? " et ses sous-catégories seront archivées avec elle" : ""}.</DialogDescription></DialogHeader>{archiveTarget?.orphanRiskCount ? <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"><strong>{archiveTarget.orphanRiskCount} produit(s)</strong> n’auront plus d’autre catégorie active après cette opération.</div> : <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">Tous les produits concernés gardent une autre catégorie active.</div>}<DialogFooter><DialogClose asChild><Button variant="outline" className="rounded-xl">Annuler</Button></DialogClose><Button onClick={() => archiveTarget && runMutation(() => archiveCategoryAction(archiveTarget.id))} disabled={pending} className="rounded-xl bg-rose-600 text-white hover:bg-rose-700"><Archive className="h-4 w-4" />Archiver</Button></DialogFooter></DialogContent></Dialog>
-      <Dialog open={organizerOpen} onOpenChange={setOrganizerOpen}><DialogContent className="flex max-h-[92vh] !w-[min(1180px,calc(100%-2rem))] !max-w-none flex-col gap-0 overflow-hidden rounded-[28px] p-0"><DialogHeader className="border-b border-slate-200 px-6 py-5 pr-14"><DialogTitle>Organiser les catégories</DialogTitle><DialogDescription>L’ordre est enregistré directement dans le catalogue. La publication de la Homepage reste gérée dans son éditeur.</DialogDescription></DialogHeader>{organizerOpen ? <Organizer categories={data.categories} onSaved={(message) => { setNotice(message); setOrganizerOpen(false); window.location.reload(); }} /> : null}</DialogContent></Dialog>
+      <Dialog open={organizerOpen} onOpenChange={setOrganizerOpen}><DialogContent className="flex max-h-[92vh] !w-[min(1180px,calc(100%-2rem))] !max-w-none flex-col gap-0 overflow-hidden rounded-[28px] p-0"><DialogHeader className="border-b border-slate-200 px-6 py-5 pr-14"><DialogTitle>Organiser les catégories</DialogTitle><DialogDescription>L’ordre des catégories principales sélectionnées est aussi celui du menu. La publication de la Homepage reste gérée dans son éditeur.</DialogDescription></DialogHeader>{organizerOpen ? <Organizer categories={data.categories} onSaved={(message) => { setNotice(message); setOrganizerOpen(false); window.location.reload(); }} /> : null}</DialogContent></Dialog>
     </div>
   );
 }

@@ -109,6 +109,7 @@ export async function saveCategoryAction(
   const description = read(formData, "description") || null;
   const isActive = checked(formData, "isActive");
   const isFeatured = checked(formData, "isFeatured");
+  const showInNavigation = checked(formData, "showInNavigation");
   const removeImage = checked(formData, "removeImage");
   const imageFile = formData.get("imageFile");
 
@@ -185,6 +186,7 @@ export async function saveCategoryAction(
               parentId,
               isActive,
               featured: isFeatured,
+              showInNavigation: parentId ? false : showInNavigation,
               ...(uploaded?.url
                 ? { imageUrl: uploaded.url }
                 : removeImage
@@ -197,6 +199,7 @@ export async function saveCategoryAction(
             parentId,
             isActive,
             isFeatured,
+            showInNavigation: parentId ? false : showInNavigation,
           });
         } else {
           const lastSibling = await tx.category.aggregate({
@@ -212,6 +215,7 @@ export async function saveCategoryAction(
               range: (lastSibling._max.range ?? -1) + 1,
               isActive,
               featured: isFeatured,
+              showInNavigation: parentId ? false : showInNavigation,
               imageUrl: uploaded?.url || null,
             },
           });
@@ -220,6 +224,7 @@ export async function saveCategoryAction(
             parentId,
             isActive,
             isFeatured,
+            showInNavigation: parentId ? false : showInNavigation,
           });
         }
       },
@@ -242,7 +247,11 @@ export async function saveCategoryAction(
 
 export async function setCategoryFlagsAction(
   id: string,
-  values: { isActive?: boolean; isFeatured?: boolean }
+  values: {
+    isActive?: boolean;
+    isFeatured?: boolean;
+    showInNavigation?: boolean;
+  }
 ): Promise<CategoryMutationState> {
   const identity = await requireAdmin();
   try {
@@ -254,6 +263,7 @@ export async function setCategoryFlagsAction(
         parentId: true,
         isActive: true,
         featured: true,
+        showInNavigation: true,
       },
     });
     if (!category) throw new Error("Cette catégorie n’existe plus.");
@@ -267,6 +277,12 @@ export async function setCategoryFlagsAction(
       if (!parent || parent.archivedAt || !parent.isActive) {
         throw new Error("Activez d’abord la catégorie parente.");
       }
+    }
+
+    if (typeof values.showInNavigation === "boolean" && category.parentId) {
+      throw new Error(
+        "La présence d’une sous-catégorie dans le menu dépend de sa catégorie principale."
+      );
     }
 
     const resolved = resolveCategoryFlagUpdate(category, values);

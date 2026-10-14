@@ -4,7 +4,7 @@ import { Prisma, type InventoryMovementReason, type ProductLifecycleStatus, type
 import { revalidatePath, revalidateTag } from "next/cache";
 
 import { getAdminDataTag, requireAdmin } from "@/lib/admin";
-import { deleteStoredAssets, isUploadedFile, saveOptimizedImage } from "@/lib/admin-media";
+import { deleteStoredAssets, isUploadedFile, saveOptimizedProductImages } from "@/lib/admin-media";
 import { adjustInventoryInTransaction } from "@/lib/inventory";
 import { prisma } from "@/lib/prisma";
 import { validateBulkProductAction, validateProductLifecycleTransition, type BulkProductAction } from "@/lib/products/domain";
@@ -127,9 +127,9 @@ export async function saveProductAction(previous: ProductMutationState, formData
     if (!imageFiles.length && !existing?.images.length) return result(false, "Un produit actif doit avoir une image principale.", revision);
   }
 
-  let uploaded: Awaited<ReturnType<typeof saveOptimizedImage>>[] = [];
+  let uploaded: Awaited<ReturnType<typeof saveOptimizedProductImages>> = [];
   try {
-    uploaded = await Promise.all(imageFiles.slice(0, 6).map((file) => saveOptimizedImage(file, "products", name)));
+    uploaded = await saveOptimizedProductImages(imageFiles, name);
     const slug = existing?.slug || await uniqueSlug(name);
     const savedId = await prisma.$transaction(async (tx) => {
       const commercialData = {

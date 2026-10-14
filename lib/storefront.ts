@@ -7,7 +7,6 @@ import { type HomepageDynamicSection } from "@/lib/homepage-sections";
 import { buildHomepageSnapshotShell } from "@/lib/homepage-preview";
 import { getPublishedHomepageRenderData } from "@/lib/homepage-workspace";
 import { sanitizePublicImageUrl } from "@/lib/image";
-import { flattenCompleteCategoryTrees } from "@/lib/navigation-menu";
 import { prisma } from "@/lib/prisma";
 import {
   activeProductPromotionWhere,
@@ -17,6 +16,7 @@ import {
   buildDynamicHomepageSections,
   getFeaturedHomepageCategories,
 } from "@/lib/storefront-homepage-builder";
+import { getNavigationCategories } from "@/lib/storefront-navigation";
 import {
   getStorefrontCustomHomepageProductSections,
   type StorefrontCustomHomepageProductSection,
@@ -499,10 +499,9 @@ const buildFallbackShellData = (): StorefrontShellData => ({
 });
 
 const fetchStorefrontShellData = async (): Promise<StorefrontShellData> => {
-  // Fetch settings, links, social links, and categories in one round-trip.
-  // Navigation needs complete trees: limiting the flattened list can silently
-  // consume every slot with the first parents' children.
-  const [settingsRecord, rawLinks, rawSocialLinks, allCategoriesRaw] =
+  // Resolve navigation and footer categories independently: the main menu is
+  // admin-selected while the footer may still list active catalogue roots.
+  const [settingsRecord, rawLinks, rawSocialLinks, navigationCategories, footerCategoriesRaw] =
     await Promise.all([
       prisma.storefrontSettings.findUnique({
         where: { id: "default" },
@@ -521,16 +520,15 @@ const fetchStorefrontShellData = async (): Promise<StorefrontShellData> => {
           sortOrder: true, openInNewTab: true, isActive: true, archivedAt: true,
         },
       }),
+      getNavigationCategories(),
       prisma.category.findMany({
         where: {
           isActive: true,
           archivedAt: null,
-          OR: [
-            { parentId: null },
-            { parent: { is: { isActive: true, archivedAt: null } } },
-          ],
+          parentId: null,
         },
         orderBy: [{ range: "asc" }, { title: "asc" }],
+        take: 10,
         select: {
           id: true,
           title: true,
@@ -539,7 +537,6 @@ const fetchStorefrontShellData = async (): Promise<StorefrontShellData> => {
           description: true,
           featured: true,
           imageUrl: true,
-          parentId: true,
           _count: {
             select: {
               products: { where: { product: { is: sellableProductWhere } } },
@@ -548,10 +545,6 @@ const fetchStorefrontShellData = async (): Promise<StorefrontShellData> => {
         },
       }),
     ]);
-
-  const rootCategories = allCategoriesRaw.filter((category) => !category.parentId);
-  const navigationCategoriesRaw = flattenCompleteCategoryTrees(allCategoriesRaw);
-  const footerCategoriesRaw = rootCategories.slice(0, 10);
 
   const settings = normalizeSettings(settingsRecord);
   const activeLinks = rawLinks.filter((link) => link.isActive && !link.archivedAt);
@@ -592,7 +585,7 @@ const fetchStorefrontShellData = async (): Promise<StorefrontShellData> => {
           openInNewTab: item.openInNewTab,
         }))
       : fallbackSocialLinks(),
-    navigationCategories: navigationCategoriesRaw.map(toCategory),
+    navigationCategories,
     footerCategories: footerCategoriesRaw.map(toCategory),
   };
 };
@@ -753,12 +746,7 @@ const fetchStorefrontHomeData = async (): Promise<StorefrontHomeData> => {
       ? sortedBestSellerProducts
       : promotionalProductsRaw.slice(0, settings.bestSellersLimit).map(toProduct);
 
-  const featuredCategories =
-    featuredCategoriesRaw.length > 0
-      ? featuredCategoriesRaw
-      : shell.navigationCategories
-          .filter((category) => (category.productCount || 0) > 0)
-          .slice(0, settings.featuredCategoriesLimit);
+  const featuredCategories = featuredCategoriesRaw;
 
   let dynamicSections: HomepageDynamicSection[] = [];
   try {

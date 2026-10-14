@@ -1,12 +1,14 @@
 import type { NextConfig } from "next";
 
+import { SERVER_ACTION_BODY_SIZE_LIMIT } from "./lib/upload-limits";
+
 const nextConfig: NextConfig = {
   turbopack: {
     root: __dirname,
   },
   experimental: {
     serverActions: {
-      bodySizeLimit: "10mb",
+      bodySizeLimit: SERVER_ACTION_BODY_SIZE_LIMIT,
     },
   },
   images: {
@@ -21,20 +23,20 @@ const nextConfig: NextConfig = {
     ],
   },
   async headers() {
+    const securityHeaders = [
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), browsing-topics=()" },
+      { key: "X-Frame-Options", value: "DENY" },
+      ...(process.env.NODE_ENV === "production"
+        ? [{ key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" }]
+        : []),
+    ];
+
     return [
       {
-        // Cache static assets aggressively
-        source: "/_next/static/:path*",
-        headers: [
-          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
-        ],
-      },
-      {
-        // Cache admin API routes for a short time to reduce DB hits
-        source: "/admin/:path*",
-        headers: [
-          { key: "X-Content-Type-Options", value: "nosniff" },
-        ],
+        source: "/:path*",
+        headers: securityHeaders,
       },
     ];
   },

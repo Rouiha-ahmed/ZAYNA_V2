@@ -1,5 +1,7 @@
 import { createHmac } from "crypto";
 
+import { safeEqual } from "@/lib/security";
+
 export const CMI_GATEWAY_URL = "https://payment.cmi.co.ma/fim/est3Dgate";
 
 /**
@@ -27,7 +29,7 @@ export function verifyCMICallback(
   const received = HASH || hash;
   if (!received) return false;
   const expected = computeCMIHash(rest, storeKey);
-  return received === expected;
+  return safeEqual(received, expected);
 }
 
 /**

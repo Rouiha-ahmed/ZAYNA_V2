@@ -1,7 +1,15 @@
 import { searchProducts, SortOption } from "@/lib/queries";
+import { enforceRequestRateLimit } from "@/lib/rate-limit";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(req: NextRequest) {
+  const limited = enforceRequestRateLimit(req, {
+    namespace: "product-search",
+    limit: 90,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
+
   try {
     const params = req.nextUrl.searchParams;
 

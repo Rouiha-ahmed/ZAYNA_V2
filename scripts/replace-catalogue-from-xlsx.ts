@@ -8,7 +8,7 @@ import {
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import * as XLSX from "xlsx";
+import readExcelFile from "read-excel-file/node";
 
 const prisma = new PrismaClient();
 const SOURCE_NAME = "heypara-excel";
@@ -146,33 +146,36 @@ const parseTags = (value: unknown) => {
     });
 };
 
-const readWorkbook = (file: string) => {
+const rowsToObjects = (matrix: unknown[][], headers: string[]): ExcelRow[] =>
+  matrix
+    .slice(1)
+    .filter((row) => row.some((value) => value !== null && value !== undefined && value !== ""))
+    .map((row) =>
+      Object.fromEntries(
+        headers.map((header, index) => [header, row[index] ?? null]),
+      ),
+    );
+
+const readWorkbook = async (file: string) => {
   const bytes = readFileSync(file);
   const checksum = createHash("sha256").update(bytes).digest("hex");
-  const workbook = XLSX.read(bytes, { type: "buffer", raw: true });
-  if (!workbook.SheetNames.includes(PRODUCT_SHEET)) {
+  const workbook = await readExcelFile(bytes);
+  const sheetNames = workbook.map(({ sheet }) => sheet);
+  const productSheet = workbook.find(({ sheet }) => sheet === PRODUCT_SHEET);
+  if (!productSheet) {
     throw new Error(`Required sheet ${JSON.stringify(PRODUCT_SHEET)} is missing.`);
   }
-  const worksheet = workbook.Sheets[PRODUCT_SHEET];
-  const matrix = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
-    header: 1,
-    defval: null,
-    raw: true,
-  });
+  const matrix = productSheet.data as unknown[][];
   const headers = (matrix[0] || []).map(text);
   const missingColumns = REQUIRED_COLUMNS.filter((column) => !headers.includes(column));
   if (missingColumns.length) {
     throw new Error(`Missing required column(s): ${missingColumns.join(", ")}`);
   }
-  const rows = XLSX.utils.sheet_to_json<ExcelRow>(worksheet, {
-    defval: null,
-    raw: true,
-  });
-  const summaryRows = workbook.SheetNames.includes(SUMMARY_SHEET)
-    ? XLSX.utils.sheet_to_json<ExcelRow>(workbook.Sheets[SUMMARY_SHEET], {
-        defval: null,
-        raw: true,
-      })
+  const rows = rowsToObjects(matrix, headers);
+  const summarySheet = workbook.find(({ sheet }) => sheet === SUMMARY_SHEET);
+  const summaryHeaders = (summarySheet?.data[0] || []).map(text);
+  const summaryRows = summarySheet
+    ? rowsToObjects(summarySheet.data as unknown[][], summaryHeaders)
     : [];
   const summaryTotal = summaryRows.find(
     (row) => normalizedKey(text(row["Marque"])) === "total",
@@ -181,7 +184,7 @@ const readWorkbook = (file: string) => {
     checksum,
     headers,
     rows,
-    sheetNames: workbook.SheetNames,
+    sheetNames,
     summaryProductTotal: summaryTotal ? Number(summaryTotal["Nb produits"]) : null,
   };
 };
@@ -758,7 +761,7 @@ const replaceCatalogue = async (products: ParsedProduct[], checksum: string) => 
 const main = async () => {
   const options = parseCli();
   const connection = await assertLocalDatabase();
-  const workbook = readWorkbook(options.file);
+  const workbook = await readWorkbook(options.file);
   const parsed = parseProducts(workbook.rows);
   const errors = parsed.issues.filter((issue) => issue.severity === "error");
   const warnings = parsed.issues.filter((issue) => issue.severity === "warning");

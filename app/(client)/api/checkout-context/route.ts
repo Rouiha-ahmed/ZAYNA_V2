@@ -1,10 +1,18 @@
 import { getCheckoutContextForUser } from "@/lib/services/customer";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { enforceRequestRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const limited = enforceRequestRateLimit(request, {
+    namespace: "checkout-context",
+    limit: 60,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
+
   try {
     const { userId } = await auth();
     if (!userId) {

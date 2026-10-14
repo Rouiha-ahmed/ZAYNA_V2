@@ -1,7 +1,15 @@
 import { getProductsByCategoryId } from "@/lib/queries";
+import { enforceRequestRateLimit } from "@/lib/rate-limit";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(req: NextRequest) {
+  const limited = enforceRequestRateLimit(req, {
+    namespace: "products-by-category",
+    limit: 120,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
+
   try {
     const categoryId = req.nextUrl.searchParams.get("categoryId")?.trim();
     if (!categoryId) {

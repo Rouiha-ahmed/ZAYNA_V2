@@ -1,11 +1,19 @@
 import { calculatePromoDiscount, PaymentMethod } from "@/lib/promo";
 import { findPromoCodeByCode } from "@/lib/services/promo";
+import { enforceRequestRateLimit } from "@/lib/rate-limit";
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
+  const limited = enforceRequestRateLimit(req, {
+    namespace: "promo-validation",
+    limit: 30,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
+
   try {
     const { userId } = await auth();
     if (!userId) {

@@ -64,26 +64,28 @@ model Address {
 }
 
 model Category {
-  id          String            @id @default(cuid())
-  title       String
-  slug        String            @unique
-  description String?
-  range       Int?
-  featured    Boolean           @default(false)
-  imageUrl    String?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  parentId    String?
-  isActive    Boolean           @default(true)
-  archivedAt  DateTime?
-  archivedBy  String?
-  parent      Category?         @relation("CategoryTree", fields: [parentId], references: [id])
-  children    Category[]        @relation("CategoryTree")
-  products    ProductCategory[]
+  id               String            @id @default(cuid())
+  title            String
+  slug             String            @unique
+  description      String?
+  range            Int?
+  featured         Boolean           @default(false)
+  imageUrl         String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  parentId         String?
+  isActive         Boolean           @default(true)
+  showInNavigation Boolean           @default(false)
+  archivedAt       DateTime?
+  archivedBy       String?
+  parent           Category?         @relation("CategoryTree", fields: [parentId], references: [id])
+  children         Category[]        @relation("CategoryTree")
+  products         ProductCategory[]
 
   @@index([title])
   @@index([parentId, range, title])
   @@index([isActive, archivedAt])
+  @@index([showInNavigation, isActive, archivedAt, parentId])
   @@index([featured, isActive, archivedAt])
   @@index([archivedAt])
   @@index([title(ops: raw("gin_trgm_ops"))], map: "Category_title_trgm_idx", type: Gin)

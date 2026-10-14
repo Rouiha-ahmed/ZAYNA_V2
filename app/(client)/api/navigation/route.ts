@@ -3,6 +3,7 @@ import { unstable_cache } from "next/cache";
 
 import { getAdminIdentity } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
+import { enforceRequestRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,14 @@ const getNavContext = unstable_cache(
   { revalidate: 30 }
 );
 
-export async function GET() {
+export async function GET(request: Request) {
+  const limited = enforceRequestRateLimit(request, {
+    namespace: "navigation-context",
+    limit: 120,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
+
   try {
     const identity = await getAdminIdentity();
 

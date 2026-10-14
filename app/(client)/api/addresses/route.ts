@@ -4,10 +4,18 @@ import {
 } from "@/lib/services/customer";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
+import { enforceRequestRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const limited = enforceRequestRateLimit(req, {
+    namespace: "customer-addresses-read",
+    limit: 120,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
+
   try {
     const { userId } = await auth();
     if (!userId) {
@@ -37,6 +45,13 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const limited = enforceRequestRateLimit(req, {
+    namespace: "customer-addresses-write",
+    limit: 20,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
+
   try {
     const { userId } = await auth();
     if (!userId) {

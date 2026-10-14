@@ -32,8 +32,12 @@ export const findSimilarCategory = <T extends Pick<CategoryPlacementRecord, "id"
 };
 
 export function resolveCategoryFlagUpdate(
-  current: { isActive: boolean; featured: boolean },
-  requested: { isActive?: boolean; isFeatured?: boolean },
+  current: { isActive: boolean; featured: boolean; showInNavigation: boolean },
+  requested: {
+    isActive?: boolean;
+    isFeatured?: boolean;
+    showInNavigation?: boolean;
+  },
 ) {
   const nextIsActive = requested.isActive ?? current.isActive;
   const nextIsFeatured = requested.isActive === false
@@ -52,6 +56,9 @@ export function resolveCategoryFlagUpdate(
       ...(typeof requested.isFeatured === "boolean"
         ? { featured: requested.isFeatured }
         : {}),
+      ...(typeof requested.showInNavigation === "boolean"
+        ? { showInNavigation: requested.showInNavigation }
+        : {}),
       ...(requested.isActive === false ? { featured: false } : {}),
     },
     audit: {
@@ -60,6 +67,9 @@ export function resolveCategoryFlagUpdate(
         : {}),
       ...(typeof requested.isFeatured === "boolean"
         ? { isFeatured: nextIsFeatured }
+        : {}),
+      ...(typeof requested.showInNavigation === "boolean"
+        ? { showInNavigation: requested.showInNavigation }
         : {}),
       ...(requested.isActive === false ? { isFeatured: false } : {}),
     },
@@ -114,6 +124,7 @@ export type AdminCategoryItem = {
   sortOrder: number;
   isActive: boolean;
   isFeatured: boolean;
+  showInNavigation: boolean;
   archivedAt: Date | null;
   archivedBy: string | null;
   updatedAt: Date;
@@ -161,6 +172,7 @@ export async function getAdminCategoriesData(): Promise<AdminCategoriesData> {
           range: true,
           isActive: true,
           featured: true,
+          showInNavigation: true,
           archivedAt: true,
           archivedBy: true,
           updatedAt: true,
@@ -240,6 +252,7 @@ export async function getAdminCategoriesData(): Promise<AdminCategoriesData> {
     sortOrder: row.range ?? 0,
     isActive: row.isActive,
     isFeatured: row.featured,
+    showInNavigation: row.showInNavigation,
     archivedAt: row.archivedAt,
     archivedBy: row.archivedBy,
     updatedAt: row.updatedAt,

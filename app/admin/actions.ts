@@ -15,7 +15,7 @@ import {
   getAdminDataTag,
   requireAdmin,
 } from "@/lib/admin";
-import { deleteStoredAsset, deleteStoredAssets, isUploadedFile, saveOptimizedImage } from "@/lib/admin-media";
+import { deleteStoredAsset, deleteStoredAssets, isUploadedFile, saveOptimizedImage, saveOptimizedProductImages } from "@/lib/admin-media";
 import { findSimilarBrand } from "@/lib/brands";
 import { adjustInventoryInTransaction } from "@/lib/inventory";
 import { prisma } from "@/lib/prisma";
@@ -1315,9 +1315,7 @@ export async function createProductAction(formData: FormData) {
     let uploadedImages: UploadedAsset[] = [];
 
     try {
-      uploadedImages = await Promise.all(
-        imageFiles.map((file) => saveOptimizedImage(file, "products", name))
-      );
+      uploadedImages = await saveOptimizedProductImages(imageFiles, name);
 
       await prisma.$transaction(async (tx) => {
         const product = await tx.product.create({
@@ -1477,9 +1475,7 @@ export async function updateProductAction(formData: FormData) {
 
     try {
       if (imageFiles.length > 0) {
-        uploadedImages = await Promise.all(
-          imageFiles.map((file) => saveOptimizedImage(file, "products", name))
-        );
+        uploadedImages = await saveOptimizedProductImages(imageFiles, name);
       }
 
       await prisma.$transaction(async (tx) => {
